@@ -178,11 +178,6 @@ const items: ProbabilityItem[] = [
     rows: successOnlyRows(0, [100, 90, 80, 60, 40, 20, 5, 3, 2, 1]),
   },
   {
-    id: 'refining-stone', name: '洗练石', category: '宝石与圣器', mode: 'upgrade', symbol: '⬡', accent: '#58d9d1', accentSoft: '#133c40',
-    description: '从 1 级一路强化至 20 级。', sourceNote: '失败后果未在公示表中说明；Mock 失败时不改等级。', minLevel: 1, maxLevel: 20,
-    rows: successOnlyRows(1, [100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10]),
-  },
-  {
     id: 'element-compass', name: '元素罗盘', category: '特殊强化', mode: 'upgrade', symbol: '✣', accent: '#47d7ac', accentSoft: '#123d38',
     description: '唯一包含 +2 跳级结果的四分支强化。', sourceNote: '升级 +1、跳级 +2、保持不变与降级 -1。', minLevel: 0, maxLevel: 10, rows: compassRows(),
   },
@@ -190,11 +185,6 @@ const items: ProbabilityItem[] = [
     id: 'moon-myth', name: '星月神话', aliases: ['星云沙'], category: '宝石与圣器', mode: 'upgrade', symbol: '☾', accent: '#a78bfa', accentSoft: '#2a2148',
     description: '与星云沙共用成功、不变、降级概率。', sourceNote: '两个名称在公示中列为同组。', minLevel: 0, maxLevel: 10,
     rows: standardRows([[100, 0, 0], [90, 10, 0], [80, 10, 10], [60, 30, 10], [40, 40, 20], [30, 40, 30], [20, 45, 35], [15, 45, 40], [5, 50, 45], [2, 50, 48]]),
-  },
-  {
-    id: 'moon-cloud', name: '星月彩云', category: '概率重绘', mode: 'draw', symbol: '☁', accent: '#b492ff', accentSoft: '#2a2148',
-    description: '触发后随机点亮 1、3 或 5 个星位。', sourceNote: '官方公布触发星位数量分布。',
-    drawOptions: [{ label: '1 个星位', probability: 85 }, { label: '3 个星位', probability: 12 }, { label: '5 个星位', probability: 3 }],
   },
   {
     id: 'divine-ascension', name: '神装升阶', category: '装备升阶', mode: 'upgrade', symbol: '⇧', accent: '#ffb657', accentSoft: '#3c2918',
@@ -285,6 +275,15 @@ function outcomeStyle(kind: OutcomeKind) {
   if (kind === 'draw') return 'drawn';
   return 'neutral';
 }
+
+function visualTier(entry: ProbabilityItem, current: number) {
+  if (entry.mode === 'draw') return 0;
+  const min = entry.minLevel ?? 0;
+  const span = Math.max(1, (entry.maxLevel ?? min + 1) - min);
+  return Math.min(5, Math.floor(((current - min) / span) * 5));
+}
+
+const tierNames = ['原初', '微光', '精炼', '星辉', '神话', '天穹'];
 
 export default function Home() {
   const initialLevels = useMemo(() => Object.fromEntries(items.filter((item) => item.mode !== 'draw').map((item) => [item.id, item.minLevel ?? 0])), []);
@@ -416,6 +415,8 @@ export default function Home() {
   const canForge = item.mode === 'draw' || outcomes.length > 0;
   const actionLabel = item.mode === 'draw' ? '唤醒图腾' : item.mode === 'check' ? '进行祈愿' : item.mode === 'adaptive' ? '点亮星辰' : '开始强化';
   const levelName = item.mode === 'adaptive' ? `${level} 星` : item.mode === 'check' ? `${level} 档` : `+${level}`;
+  const tier = visualTier(item, level);
+  const tierProgress = item.mode === 'draw' ? 0 : Math.round(((level - (item.minLevel ?? 0)) / Math.max(1, (item.maxLevel ?? 1) - (item.minLevel ?? 0))) * 100);
 
   function shiftLevel(delta: number) {
     selectLevel(Math.min(maxSelectable, Math.max(item.minLevel ?? 0, level + delta)));
@@ -434,14 +435,14 @@ export default function Home() {
 
       <section className="forge-layout">
         <aside className="catalog-panel">
-          <div className="catalog-heading"><div><span>旅团背包</span><b>{items.length}/24</b></div><small>选择要锻造的道具</small></div>
+          <div className="catalog-heading"><div><span>旅团背包</span><b>{items.length}/22</b></div><small>选择要锻造的道具</small></div>
           <label className="search-box"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索道具或别名" /></label>
           <div className="category-list" aria-label="道具分类">
             {categories.map((entry) => <button key={entry} type="button" className={category === entry ? 'active' : ''} onClick={() => setCategory(entry)}>{entry}</button>)}
           </div>
           <div className="item-list">
             {visibleItems.map((entry) => (
-              <button key={entry.id} type="button" className={`item-card ${entry.id === item.id ? 'active' : ''}`} onClick={() => chooseItem(entry)}>
+              <button key={entry.id} type="button" className={`item-card tier-${visualTier(entry, levels[entry.id] ?? entry.minLevel ?? 0)} ${entry.id === item.id ? 'active' : ''}`} onClick={() => chooseItem(entry)}>
                 <span className="item-symbol" style={{ '--card-accent': entry.accent, '--card-soft': entry.accentSoft } as CSSProperties}>{entry.symbol}</span>
                 <span><b>{entry.name}</b><small>{entry.aliases?.length ? entry.aliases.join(' / ') : entry.category}</small></span>
                 <em>{entry.mode === 'draw' ? '秘宝' : entry.mode === 'adaptive' ? `${levels[entry.id] ?? 0}★` : entry.mode === 'check' ? `${levels[entry.id] ?? entry.minLevel}档` : `+${levels[entry.id] ?? entry.minLevel ?? 0}`}</em>
@@ -454,18 +455,22 @@ export default function Home() {
         <section className="forge-stage">
           <header className="item-hero">
             <div><div className="eyebrow"><span>{item.category}</span><i>{item.mode === 'draw' ? '远古秘宝' : item.mode === 'adaptive' ? '星辰遗物' : item.mode === 'check' ? '祝福仪式' : '可成长装备'}</i></div><h2>{item.name}</h2><p>{item.aliases?.length ? `古称：${item.aliases.join('、')} · ` : ''}{item.description}</p></div>
-            <div className="independent-badge"><b>命运独立</b><span>每次锻造重新判定</span></div>
+            <div className="hero-status"><div className={`tier-badge tier-${tier}`}><small>道具境界</small><b>{item.mode === 'draw' ? '秘宝' : tierNames[tier]}</b></div><div className="independent-badge"><b>命运独立</b><span>每次锻造重新判定</span></div></div>
           </header>
 
-          <div className="forge-chamber">
+          <div className={`forge-chamber tier-${tier} ${lastAttempt ? `echo-${outcomeStyle(lastAttempt.kind)}` : ''}`} key={`${item.id}-${lastAttempt?.id ?? 'idle'}`} style={{ '--tier-progress': `${tierProgress}%` } as CSSProperties}>
             <div className="floating-rune rune-one">✦</div><div className="floating-rune rune-two">⌁</div><div className="floating-rune rune-three">◇</div>
             <div className="altar-glow" />
-            <div className="artifact-wrap">
+            <div className={`artifact-wrap tier-${tier}`}>
+              <div className="ascension-halo halo-one" /><div className="ascension-halo halo-two" />
               <div className="orbit orbit-one" /><div className="orbit orbit-two" />
+              <div className="artifact-wings"><i /><i /></div>
+              <div className="artifact-crown"><i>◆</i><b>✦</b></div>
               <div className="artifact"><span>{item.symbol}</span></div>
+              <div className="rune-shards">{Array.from({ length: 8 }, (_, index) => <i key={index} />)}</div>
               {item.mode !== 'draw' && <b className="artifact-level">{levelName}</b>}
             </div>
-            <div className="artifact-name"><span>{item.mode === 'draw' ? '等待唤醒' : canForge ? '等待强化' : '已臻至最高境界'}</span><h3>{item.name}</h3></div>
+            <div className="artifact-name"><span>{item.mode === 'draw' ? '等待唤醒' : canForge ? `${tierNames[tier]}境 · 等待强化` : '已臻至最高境界'}</span><h3>{item.name}</h3><div className="evolution-track" aria-label={`成长进度 ${tierProgress}%`}>{Array.from({ length: 6 }, (_, index) => <i key={index} className={index <= tier ? 'lit' : ''} />)}</div></div>
             {item.mode !== 'draw' && (
               <div className="rank-switcher" aria-label="试炼档位">
                 <button type="button" onClick={() => shiftLevel(-1)} disabled={level <= (item.minLevel ?? 0)}>−</button>
