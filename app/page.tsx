@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 
-type OutcomeKind = 'success' | 'jump' | 'stay' | 'down' | 'fail' | 'draw';
+type OutcomeKind = 'success' | 'jump' | 'stay' | 'down' | 'fail' | 'protected' | 'draw';
 type Mode = 'upgrade' | 'check' | 'draw' | 'adaptive';
 type Category = '宝石与圣器' | '特殊强化' | '装备升阶' | '星级系统';
 
@@ -66,6 +66,215 @@ type ResultFeedback = {
   attempt: Attempt;
 };
 
+type StoredSession = {
+  version: 1;
+  selectedId: string;
+  levels: Record<string, number>;
+  targetLevels: Record<string, number>;
+  attemptCount: number;
+  attempts: Attempt[];
+  guardianProtection: boolean;
+  costLedger: { knownSpend: number; pricedAttempts: number; itemSpend: Record<string, number> };
+};
+
+type GraduationItemSpend = {
+  id: string;
+  name: string;
+  level: string;
+  spend: number;
+  quantity?: number;
+};
+
+type GraduationSnapshot = {
+  spend: number;
+  itemSpends: GraduationItemSpend[];
+  pricedAttempts: number;
+  completedAt: string;
+};
+
+type AutoTargetRun = {
+  itemId: string;
+  target: number;
+};
+
+const sessionStorageKey = 'myj-forge-session-v1';
+const autoTargetLimits: Record<string, number> = { 'burning-gem': 8, 'moon-myth': 9 };
+const outcomeKinds: OutcomeKind[] = ['success', 'jump', 'stay', 'down', 'fail', 'protected', 'draw'];
+
+function isStoredAttempt(value: unknown): value is Attempt {
+  if (!value || typeof value !== 'object') return false;
+  const attempt = value as Partial<Attempt>;
+  return typeof attempt.id === 'number'
+    && typeof attempt.itemId === 'string'
+    && typeof attempt.itemName === 'string'
+    && typeof attempt.fromLabel === 'string'
+    && typeof attempt.resultLabel === 'string'
+    && typeof attempt.toLabel === 'string'
+    && typeof attempt.probability === 'number'
+    && typeof attempt.roll === 'number'
+    && typeof attempt.kind === 'string'
+    && outcomeKinds.includes(attempt.kind as OutcomeKind)
+    && (attempt.cost === null || typeof attempt.cost === 'number');
+}
+
+function roundedRectPath(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
+  const corner = Math.min(radius, width / 2, height / 2);
+  context.beginPath();
+  context.moveTo(x + corner, y);
+  context.lineTo(x + width - corner, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + corner);
+  context.lineTo(x + width, y + height - corner);
+  context.quadraticCurveTo(x + width, y + height, x + width - corner, y + height);
+  context.lineTo(x + corner, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - corner);
+  context.lineTo(x, y + corner);
+  context.quadraticCurveTo(x, y, x + corner, y);
+  context.closePath();
+}
+
+async function createGraduationPosterFile(snapshot: GraduationSnapshot) {
+  await document.fonts?.ready;
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080;
+  canvas.height = 1440;
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+
+  const background = context.createLinearGradient(0, 0, 1080, 1440);
+  background.addColorStop(0, '#090d16');
+  background.addColorStop(.5, '#11101e');
+  background.addColorStop(1, '#080a10');
+  context.fillStyle = background;
+  context.fillRect(0, 0, 1080, 1440);
+
+  const halo = context.createRadialGradient(540, 470, 20, 540, 470, 510);
+  halo.addColorStop(0, 'rgba(180,124,255,.24)');
+  halo.addColorStop(.45, 'rgba(255,108,53,.09)');
+  halo.addColorStop(1, 'rgba(0,0,0,0)');
+  context.fillStyle = halo;
+  context.fillRect(0, 0, 1080, 1020);
+
+  for (let index = 0; index < 58; index += 1) {
+    const x = 54 + ((index * 173) % 972);
+    const y = 70 + ((index * 257) % 1210);
+    const size = index % 7 === 0 ? 3 : index % 3 === 0 ? 2 : 1;
+    context.globalAlpha = .18 + ((index * 13) % 48) / 100;
+    context.fillStyle = index % 4 === 0 ? '#ffd699' : '#d8c7ff';
+    context.fillRect(x, y, size, size);
+  }
+  context.globalAlpha = 1;
+
+  roundedRectPath(context, 48, 48, 984, 1344, 28);
+  context.strokeStyle = 'rgba(221,183,103,.56)';
+  context.lineWidth = 2;
+  context.stroke();
+  roundedRectPath(context, 67, 67, 946, 1306, 22);
+  context.strokeStyle = 'rgba(196,157,85,.18)';
+  context.lineWidth = 1;
+  context.stroke();
+
+  context.textAlign = 'center';
+  context.fillStyle = '#a98d5e';
+  context.font = '600 24px ui-monospace, monospace';
+  context.fillText('MYJ · BUILD GRADUATION', 540, 132);
+  context.fillStyle = '#f0dfbc';
+  context.font = '700 64px "Noto Serif SC", serif';
+  context.fillText('极品号毕业照', 540, 222);
+  context.fillStyle = '#746b80';
+  context.font = '400 22px "Noto Serif SC", serif';
+  context.fillText('燃烧宝石 +8 · 星月神话 +9 · 其余项目全 10', 540, 268);
+
+  const drawStandard = (x: number, label: string, color: string) => {
+    roundedRectPath(context, x, 294, 220, 48, 24);
+    context.fillStyle = 'rgba(13,17,25,.82)';
+    context.fill();
+    context.strokeStyle = color;
+    context.globalAlpha = .55;
+    context.stroke();
+    context.globalAlpha = 1;
+    context.fillStyle = color;
+    context.font = '600 19px "Noto Serif SC", serif';
+    context.fillText(label, x + 110, 326);
+  };
+  drawStandard(180, '燃烧 +8  达成', '#ff7a32');
+  drawStandard(430, '星月 +9  达成', '#b67cff');
+  drawStandard(680, '其余全 10  达成', '#4ed08b');
+
+  context.textAlign = 'left';
+  context.fillStyle = '#a5906c';
+  context.font = '600 25px "Noto Serif SC", serif';
+  context.fillText('全部养成花费', 120, 392);
+  context.textAlign = 'right';
+  context.fillStyle = '#665d68';
+  context.font = '500 19px ui-monospace, monospace';
+  context.fillText(`${snapshot.itemSpends.length} ITEMS`, 960, 392);
+
+  const spendColors = ['#4ed08b', '#55a8ff', '#b67cff', '#ff7a32'];
+  const gridLeft = 120;
+  const gridTop = 420;
+  const cardWidth = 270;
+  const cardHeight = 106;
+  const columnGap = 15;
+  const rowGap = 12;
+  snapshot.itemSpends.forEach((entry, index) => {
+    const column = index % 3;
+    const row = Math.floor(index / 3);
+    const x = gridLeft + column * (cardWidth + columnGap);
+    const y = gridTop + row * (cardHeight + rowGap);
+    const color = entry.id === 'burning-gem' ? '#ff7a32' : entry.id === 'moon-myth' ? '#b67cff' : spendColors[index % spendColors.length];
+    roundedRectPath(context, x, y, cardWidth, cardHeight, 14);
+    context.fillStyle = 'rgba(10,14,21,.72)';
+    context.fill();
+    context.strokeStyle = color;
+    context.globalAlpha = .25;
+    context.stroke();
+    context.globalAlpha = 1;
+    context.textAlign = 'left';
+    context.fillStyle = '#827887';
+    context.font = '500 19px "Noto Serif SC", serif';
+    context.fillText(`${entry.name}${entry.quantity && entry.quantity > 1 ? ` ×${entry.quantity}` : ''}`, x + 17, y + 31, 155);
+    context.fillStyle = color;
+    context.font = '700 20px ui-monospace, monospace';
+    context.fillText(entry.level, x + 215, y + 31, 42);
+    context.fillStyle = '#e7d8bb';
+    context.font = '700 27px ui-monospace, monospace';
+    context.fillText(`¥${entry.spend.toFixed(2)}`, x + 17, y + 76, cardWidth - 34);
+    context.fillStyle = '#514b55';
+    context.font = '500 15px ui-monospace, monospace';
+    context.fillText(String(index + 1).padStart(2, '0'), x + 226, y + 77);
+  });
+
+  context.textAlign = 'center';
+  roundedRectPath(context, 120, 1138, 840, 157, 24);
+  const costPanel = context.createLinearGradient(120, 1138, 960, 1295);
+  costPanel.addColorStop(0, 'rgba(80,54,26,.52)');
+  costPanel.addColorStop(.5, 'rgba(41,31,38,.92)');
+  costPanel.addColorStop(1, 'rgba(50,34,72,.55)');
+  context.fillStyle = costPanel;
+  context.fill();
+  context.strokeStyle = 'rgba(229,190,104,.5)';
+  context.stroke();
+  context.fillStyle = '#95846a';
+  context.font = '500 21px "Noto Serif SC", serif';
+  context.fillText('毕业总花费', 540, 1177);
+  context.fillStyle = '#f4dfae';
+  context.font = '700 47px "Noto Serif SC", serif';
+  context.fillText(`花费 ¥${snapshot.spend.toFixed(2)} 毕业了`, 540, 1236);
+  context.fillStyle = '#776d79';
+  context.font = '400 18px "Noto Serif SC", serif';
+  context.fillText(`累计计价 ${snapshot.pricedAttempts} 次 · 所有进度来自本地养成记录`, 540, 1273);
+
+  context.fillStyle = '#82735e';
+  context.font = '500 22px ui-monospace, monospace';
+  context.fillText(snapshot.completedAt, 540, 1340);
+  context.fillStyle = '#554e58';
+  context.font = '500 18px ui-monospace, monospace';
+  context.fillText('KEEP THE FIRE · FOLLOW THE MOON', 540, 1372);
+
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+  return blob ? new File([blob], `毕业照-${Date.now()}.png`, { type: 'image/png' }) : null;
+}
+
 function standardRows(rates: Array<[number, number, number]>): UpgradeRow[] {
   return rates.map(([success, stay, down], current) => ({
     current,
@@ -92,7 +301,30 @@ function stayRows(start: number, rates: number[]): UpgradeRow[] {
   });
 }
 
-function successOnlyRows(start: number, rates: number[]): UpgradeRow[] {
+function checkpointRows(start: number, rates: number[], checkpoints: number[]): UpgradeRow[] {
+  return rates.map((success, index) => {
+    const current = start + index;
+    const failureTo = checkpoints.reduce((floor, checkpoint) => checkpoint <= current ? checkpoint : floor, start);
+    return {
+      current,
+      target: current + 1,
+      outcomes: [
+        { key: 'success', label: '升级成功', probability: success, target: current + 1, kind: 'success' as const },
+        { key: 'fail', label: `强化失败 · 回到保级 +${failureTo}`, probability: 100 - success, target: failureTo, kind: 'fail' as const },
+      ].filter((entry) => entry.probability > 0),
+    };
+  });
+}
+
+function isCheckpointLevel(itemId: string, level: number) {
+  if (itemId === 'holy-gift') return [2, 4, 6, 8].includes(level);
+  if (itemId === 'earring') return [4, 6, 8, 10, 12, 14].includes(level);
+  if (itemId === 'goddess-fate' || itemId === 'mophone' || itemId === 'wanxiang') return [4, 6, 8].includes(level);
+  if (itemId === 'mystic-talisman' || itemId === 'harmony-cup' || itemId === 'primordial-spirit') return [3, 6, 9].includes(level);
+  return false;
+}
+
+function resetRows(start: number, rates: number[]): UpgradeRow[] {
   return rates.map((success, index) => {
     const current = start + index;
     return {
@@ -100,21 +332,10 @@ function successOnlyRows(start: number, rates: number[]): UpgradeRow[] {
       target: current + 1,
       outcomes: [
         { key: 'success', label: '升级成功', probability: success, target: current + 1, kind: 'success' as const },
-        { key: 'fail', label: '失败（后果未公示）', probability: 100 - success, target: current, kind: 'fail' as const, note: 'Mock 中不改变等级' },
+        { key: 'down', label: '升级失败 · 归 0', probability: 100 - success, target: 0, kind: 'down' as const },
       ].filter((entry) => entry.probability > 0),
     };
   });
-}
-
-function checkRows(start: number, rates: number[]): UpgradeRow[] {
-  return rates.map((success, index) => ({
-    current: start + index,
-    target: null,
-    outcomes: [
-      { key: 'success', label: '检定成功', probability: success, target: null, kind: 'success' as const },
-      { key: 'fail', label: '检定失败', probability: 100 - success, target: null, kind: 'fail' as const },
-    ].filter((entry) => entry.probability > 0),
-  }));
 }
 
 function explicitRows(specs: Array<[number, number, number, number | null]>): UpgradeRow[] {
@@ -163,18 +384,18 @@ const items: ProbabilityItem[] = [
   },
   {
     id: 'harmony-cup', name: '和谐圣杯', aliases: ['圣杯之环'], category: '宝石与圣器', mode: 'upgrade', symbol: '♜', accent: '#f3bd63', accentSoft: '#3b2b17',
-    description: '与圣杯之环共用同一组公示概率。', sourceNote: '两个名称在公示中列为同组。', minLevel: 1, maxLevel: 10,
-    rows: stayRows(1, [100, 85, 70, 55, 40, 25, 15, 5, 1]),
+    description: '+3、+6、+9 为保级点，失败回到最近保级等级。', sourceNote: '成功率沿用公示；失败回退规则按当前 Mock 设定。', minLevel: 1, maxLevel: 10,
+    rows: checkpointRows(1, [100, 85, 70, 55, 40, 25, 15, 5, 1], [1, 3, 6, 9]),
   },
   {
     id: 'mystic-talisman', name: '神秘护符', category: '宝石与圣器', mode: 'upgrade', symbol: '✦', accent: '#5ddbb0', accentSoft: '#163c35',
-    description: '官方只公布每级升级成功率。', sourceNote: '失败后果未在公示表中说明；Mock 失败时不改等级。', minLevel: 0, maxLevel: 10,
-    rows: successOnlyRows(0, [100, 100, 90, 80, 50, 50, 30, 15, 10, 2]),
+    description: '+3、+6、+9 为保级点，失败回到最近保级等级。', sourceNote: '成功率沿用公示；失败回退规则按当前 Mock 设定。', minLevel: 0, maxLevel: 10,
+    rows: checkpointRows(0, [100, 100, 90, 80, 50, 50, 30, 15, 10, 2], [0, 3, 6, 9]),
   },
   {
     id: 'guardian-star', name: '守护之星', category: '宝石与圣器', mode: 'upgrade', symbol: '✧', accent: '#73b7ff', accentSoft: '#19314c',
-    description: '官方只公布每级升级成功率。', sourceNote: '失败后果未在公示表中说明；Mock 失败时不改等级。', minLevel: 0, maxLevel: 10,
-    rows: successOnlyRows(0, [100, 90, 80, 60, 40, 20, 5, 3, 2, 1]),
+    description: '每次消耗 ¥2 升级道具，可追加 ¥8 保护避免失败归零。', sourceNote: '未保护时失败直接归 0；启用保护后，本次失败保持当前等级。', minLevel: 0, maxLevel: 10,
+    rows: resetRows(0, [100, 90, 80, 60, 40, 20, 5, 3, 2, 1]),
   },
   {
     id: 'element-compass', name: '元素罗盘', category: '特殊强化', mode: 'upgrade', symbol: '✣', accent: '#47d7ac', accentSoft: '#123d38',
@@ -186,51 +407,36 @@ const items: ProbabilityItem[] = [
     rows: standardRows([[100, 0, 0], [90, 10, 0], [80, 10, 10], [60, 30, 10], [40, 40, 20], [30, 40, 30], [20, 45, 35], [15, 45, 40], [5, 50, 45], [2, 50, 48]]),
   },
   {
-    id: 'divine-ascension', name: '神装升阶', category: '装备升阶', mode: 'upgrade', symbol: '⇧', accent: '#ffb657', accentSoft: '#3c2918',
-    description: '神装从 0 阶升至 10 阶的成功率。', sourceNote: '失败后果未在公示表中说明；Mock 失败时不改等级。', minLevel: 0, maxLevel: 10,
-    rows: successOnlyRows(0, [100, 90, 80, 50, 40, 30, 15, 10, 5, 2]),
-  },
-  {
     id: 'holy-gift', name: '圣之赐', aliases: ['神圣之力'], category: '装备升阶', mode: 'upgrade', symbol: '✚', accent: '#f4d66f', accentSoft: '#40361b',
-    description: '与神圣之力共用指定失败等级规则。', sourceNote: '成功与失败后的等级均按公示直接落位。', minLevel: 0, maxLevel: 10,
-    rows: explicitRows([[0,100,1,null],[1,100,2,null],[2,90,3,1],[3,80,4,1],[4,50,5,4],[5,50,6,4],[6,30,7,6],[7,15,8,6],[8,10,9,8],[9,2,10,8]]),
-  },
-  {
-    id: 'holy-devotion', name: '神圣虔诚', category: '特殊强化', mode: 'check', symbol: '✥', accent: '#e8cf8f', accentSoft: '#38311e',
-    description: '按当前档位进行成功率检定。', sourceNote: '公示只给出 1–5 档成功率，未列目标或失败等级。', minLevel: 1, maxLevel: 5,
-    rows: checkRows(1, [80, 40, 20, 10, 10]),
+    description: '每次升级 ¥5，+2、+4、+6、+8 为保级点。', sourceNote: '失败时回落到最近的保级点，不会跌破已达到的 +2、+4、+6、+8。', minLevel: 0, maxLevel: 10,
+    rows: explicitRows([[0,100,1,null],[1,100,2,null],[2,90,3,2],[3,80,4,2],[4,50,5,4],[5,50,6,4],[6,30,7,6],[7,15,8,6],[8,10,9,8],[9,2,10,8]]),
   },
   {
     id: 'primordial-spirit', name: '元神', category: '装备升阶', mode: 'upgrade', symbol: '◉', accent: '#79d9ff', accentSoft: '#173748',
-    description: '成功或失败后落到公示指定等级。', sourceNote: '失败后的等级按官方表直接处理。', minLevel: 0, maxLevel: 10,
-    rows: explicitRows([[0,100,1,null],[1,100,2,null],[2,90,3,1],[3,80,4,3],[4,50,5,3],[5,50,6,3],[6,30,7,6],[7,15,8,6],[8,10,9,6],[9,2,10,9]]),
+    description: '+3、+6、+9 为保级点，失败回到最近保级等级。', sourceNote: '成功率沿用公示；失败回退规则按当前 Mock 设定。', minLevel: 0, maxLevel: 10,
+    rows: checkpointRows(0, [100, 100, 90, 80, 50, 50, 30, 15, 10, 2], [0, 3, 6, 9]),
   },
   {
     id: 'mophone', name: 'Mophone', aliases: ['手机升级配件'], category: '装备升阶', mode: 'upgrade', symbol: '▣', accent: '#62d6ff', accentSoft: '#15364a',
-    description: '与手机升级配件共用指定失败等级规则。', sourceNote: '两个名称在公示中列为同组。', minLevel: 0, maxLevel: 10,
-    rows: explicitRows([[0,100,1,null],[1,100,2,null],[2,90,3,1],[3,80,4,1],[4,25,5,4],[5,25,6,4],[6,50,7,6],[7,20,8,6],[8,15,9,8],[9,2,10,8]]),
+    description: '+4、+6、+8 为保级点，失败回到最近保级等级。', sourceNote: '成功率沿用公示；失败回退规则按当前 Mock 设定。', minLevel: 0, maxLevel: 10,
+    rows: checkpointRows(0, [100, 100, 90, 80, 25, 25, 50, 20, 15, 2], [0, 4, 6, 8]),
   },
   {
     id: 'goddess-fate', name: '命运女神', aliases: ['女神的祝福'], category: '装备升阶', mode: 'upgrade', symbol: '♢', accent: '#ff8fc5', accentSoft: '#421f36',
-    description: '与女神的祝福共用升阶规则。', sourceNote: '0–3 级均为 100%，其后按指定失败等级处理。', minLevel: 0, maxLevel: 10,
-    rows: explicitRows([[0,100,1,null],[1,100,2,null],[2,100,3,null],[3,100,4,null],[4,25,5,4],[5,25,6,4],[6,70,7,6],[7,50,8,6],[8,20,9,8],[9,5,10,8]]),
-  },
-  {
-    id: 'divine-craft', name: '鬼斧神工', category: '装备升阶', mode: 'upgrade', symbol: '⚒', accent: '#ff8b5f', accentSoft: '#40231b',
-    description: '每一级都有独立成功率与失败落点。', sourceNote: '失败后的等级按官方表直接处理。', minLevel: 0, maxLevel: 10,
-    rows: explicitRows([[0,100,1,null],[1,80,2,1],[2,60,3,1],[3,60,4,2],[4,50,5,3],[5,80,6,5],[6,60,7,5],[7,40,8,6],[8,20,9,7],[9,10,10,9]]),
+    description: '每次升级 ¥8，+4、+6、+8 为保级点。', sourceNote: '失败时回落到最近保级点，不会跌破已达到的 +4、+6、+8。', minLevel: 0, maxLevel: 10,
+    rows: checkpointRows(0, [100, 100, 100, 100, 25, 25, 70, 50, 20, 5], [0, 4, 6, 8]),
   },
   {
     id: 'earring', name: '耳环', category: '装备升阶', mode: 'upgrade', symbol: '◌', accent: '#cb9bff', accentSoft: '#312047',
-    description: '覆盖 0–15 级的长线升级规则。', sourceNote: '0–3 级均为 100%，其后按指定失败等级处理。', minLevel: 0, maxLevel: 15,
-    rows: explicitRows([[0,100,1,null],[1,100,2,null],[2,100,3,null],[3,100,4,null],[4,25,5,4],[5,25,6,4],[6,70,7,6],[7,50,8,6],[8,20,9,8],[9,5,10,8],[10,100,11,10],[11,50,12,10],[12,30,13,10],[13,20,14,13],[14,5,15,13]]),
+    description: '每次升级 ¥8，+4、+6、+8、+10、+12、+14 为保级点。', sourceNote: '失败时回落到最近保级点，不会跌破已经达到的保级等级。', minLevel: 0, maxLevel: 15,
+    rows: checkpointRows(0, [100, 100, 100, 100, 25, 25, 70, 50, 20, 5, 100, 50, 30, 20, 5], [0, 4, 6, 8, 10, 12, 14]),
   },
   {
     id: 'wanxiang', name: '万象图', category: '星级系统', mode: 'adaptive', symbol: '◎', accent: '#f8c55c', accentSoft: '#453417',
-    description: '成功率同时取决于目标星级与累计次数区间。', sourceNote: '次数区间：≤40、41–80、81–150、>150。', minLevel: 0, maxLevel: 10,
+    description: '成功率随累计次数变化，4、6、8 星为保级点。', sourceNote: '次数区间沿用公示；失败回退到最近的 4、6、8 星保级点。', minLevel: 0, maxLevel: 10,
     adaptiveRows: [
       { target: 1, rates: [100, 100, 100, 100], failureTo: 1, failureNote: '不降级' }, { target: 2, rates: [100, 100, 100, 100], failureTo: 2, failureNote: '不降级' },
-      { target: 3, rates: [70, 100, 100, 100], failureTo: 2 }, { target: 4, rates: [50, 100, 100, 100], failureTo: 2 },
+      { target: 3, rates: [70, 100, 100, 100], failureTo: 0 }, { target: 4, rates: [50, 100, 100, 100], failureTo: 0 },
       { target: 5, rates: [25, 50, 100, 100], failureTo: 4 }, { target: 6, rates: [25, 50, 70, 100], failureTo: 4 },
       { target: 7, rates: [1, 50, 70, 100], failureTo: 6 }, { target: 8, rates: [1, 15, 40, 60], failureTo: 6 },
       { target: 9, rates: [1, 3, 15, 40], failureTo: 8 }, { target: 10, rates: [1, 1, 5, 15], failureTo: 8 },
@@ -270,13 +476,10 @@ const effectProfiles: Record<string, { effect: string; rite: string; catalyst: s
   'guardian-star': { effect: 'guardian', rite: '星盾守护', catalyst: '守望星屑' },
   'element-compass': { effect: 'compass', rite: '元素跃迁', catalyst: '四象磁针' },
   'moon-myth': { effect: 'moon', rite: '星月蚀刻', catalyst: '星云砂砾' },
-  'divine-ascension': { effect: 'ascension', rite: '神装升阶', catalyst: '登神金羽' },
   'holy-gift': { effect: 'blessing', rite: '圣赐降临', catalyst: '神圣辉光' },
-  'holy-devotion': { effect: 'devotion', rite: '虔诚祈愿', catalyst: '祷告白羽' },
   'primordial-spirit': { effect: 'spirit', rite: '元神归一', catalyst: '太初魂息' },
   mophone: { effect: 'cyber', rite: '机芯超频', catalyst: '量子芯片' },
   'goddess-fate': { effect: 'fate', rite: '命运编织', catalyst: '女神丝线' },
-  'divine-craft': { effect: 'hammer', rite: '鬼斧锻打', catalyst: '神工火种' },
   earring: { effect: 'earring', rite: '双环鸣奏', catalyst: '月银铃音' },
   wanxiang: { effect: 'constellation', rite: '万象演星', catalyst: '天机星轨' },
 };
@@ -287,9 +490,19 @@ const costRules: Record<string, number> = {
   'crystal-ball': 3,
   'harmony-cup': 2,
   'mystic-talisman': 2,
+  'element-compass': 5,
+  'moon-myth': 5,
+  'holy-gift': 5,
+  'primordial-spirit': 5,
+  mophone: 8,
+  'guardian-star': 2,
+  'goddess-fate': 8,
+  earring: 8,
+  wanxiang: 8,
 };
 
-const instantUpgradeItems = new Set(['burning-gem', 'annihilation-crown', 'crystal-ball', 'harmony-cup', 'mystic-talisman']);
+const instantUpgradeItems = new Set(['burning-gem', 'annihilation-crown', 'crystal-ball', 'harmony-cup', 'mystic-talisman', 'element-compass', 'moon-myth', 'holy-gift', 'primordial-spirit', 'mophone', 'guardian-star', 'goddess-fate', 'earring', 'wanxiang']);
+const guardianProtectionCost = 8;
 
 const levelPalettes = {
   neutral: { accent: '#9b9386', soft: '#292622' },
@@ -312,23 +525,135 @@ export default function Home() {
   const initialLevels = useMemo(() => Object.fromEntries(items.filter((item) => item.mode !== 'draw').map((item) => [item.id, item.minLevel ?? 0])), []);
   const [selectedId, setSelectedId] = useState(items[0].id);
   const [levels, setLevels] = useState<Record<string, number>>(initialLevels);
+  const [targetLevels, setTargetLevels] = useState<Record<string, number>>({ ...autoTargetLimits });
+  const [autoTargetRun, setAutoTargetRun] = useState<AutoTargetRun | null>(null);
   const [attemptCount, setAttemptCount] = useState(1);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [isRolling, setIsRolling] = useState(false);
   const [lastAttempt, setLastAttempt] = useState<Attempt | null>(null);
   const [resultFeedbacks, setResultFeedbacks] = useState<ResultFeedback[]>([]);
   const feedbackSequence = useRef(0);
-  const [costLedger, setCostLedger] = useState({ knownSpend: 0, pricedAttempts: 0 });
+  const pendingForgeTimer = useRef<number | null>(null);
+  const autoTargetTimer = useRef<number | null>(null);
+  const autoTargetTick = useRef<() => void>(() => undefined);
+  const [guardianProtection, setGuardianProtection] = useState(false);
+  const [costLedger, setCostLedger] = useState({ knownSpend: 0, pricedAttempts: 0, itemSpend: {} as Record<string, number> });
+  const [hasHydrated, setHasHydrated] = useState(false);
+  const [graduationPosterOpen, setGraduationPosterOpen] = useState(false);
+  const [graduationSnapshot, setGraduationSnapshot] = useState<GraduationSnapshot | null>(null);
+  const [posterStatus, setPosterStatus] = useState<'rendering' | 'ready' | 'shared' | 'saved' | 'error'>('rendering');
+  const graduationPosterFile = useRef<File | null>(null);
+  const posterBuildSequence = useRef(0);
+
+  useEffect(() => {
+    try {
+      const rawSession = window.localStorage.getItem(sessionStorageKey);
+      if (!rawSession) return;
+      const stored = JSON.parse(rawSession) as Partial<StoredSession>;
+      if (stored.version !== 1) return;
+
+      if (typeof stored.selectedId === 'string' && items.some((entry) => entry.id === stored.selectedId)) {
+        setSelectedId(stored.selectedId);
+      }
+      if (stored.levels && typeof stored.levels === 'object') {
+        const restoredLevels = { ...initialLevels };
+        items.filter((entry) => entry.mode !== 'draw').forEach((entry) => {
+          const storedLevel = stored.levels?.[entry.id];
+          if (typeof storedLevel !== 'number' || !Number.isFinite(storedLevel)) return;
+          restoredLevels[entry.id] = Math.min(entry.maxLevel ?? storedLevel, Math.max(entry.minLevel ?? 0, Math.floor(storedLevel)));
+        });
+        setLevels(restoredLevels);
+      }
+      if (stored.targetLevels && typeof stored.targetLevels === 'object') {
+        const restoredTargets = { ...autoTargetLimits };
+        Object.entries(autoTargetLimits).forEach(([itemId, limit]) => {
+          const storedTarget = stored.targetLevels?.[itemId];
+          if (typeof storedTarget !== 'number' || !Number.isFinite(storedTarget)) return;
+          restoredTargets[itemId] = Math.min(limit, Math.max(1, Math.floor(storedTarget)));
+        });
+        setTargetLevels(restoredTargets);
+      }
+      if (typeof stored.attemptCount === 'number' && Number.isFinite(stored.attemptCount)) {
+        setAttemptCount(Math.min(9999, Math.max(1, Math.floor(stored.attemptCount))));
+      }
+      if (Array.isArray(stored.attempts)) {
+        setAttempts(stored.attempts.filter(isStoredAttempt).slice(0, 120));
+      }
+      if (typeof stored.guardianProtection === 'boolean') {
+        setGuardianProtection(stored.guardianProtection);
+      }
+      if (stored.costLedger
+        && typeof stored.costLedger.knownSpend === 'number'
+        && Number.isFinite(stored.costLedger.knownSpend)
+        && typeof stored.costLedger.pricedAttempts === 'number'
+        && Number.isFinite(stored.costLedger.pricedAttempts)) {
+        const itemSpend: Record<string, number> = {};
+        if (stored.costLedger.itemSpend && typeof stored.costLedger.itemSpend === 'object') {
+          Object.entries(stored.costLedger.itemSpend).forEach(([itemId, spend]) => {
+            if (typeof spend === 'number' && Number.isFinite(spend) && spend >= 0) itemSpend[itemId] = spend;
+          });
+        } else if (Array.isArray(stored.attempts)) {
+          stored.attempts.filter(isStoredAttempt).forEach((attempt) => {
+            itemSpend[attempt.itemId] = (itemSpend[attempt.itemId] ?? 0) + (attempt.cost ?? 0);
+          });
+        }
+        setCostLedger({
+          knownSpend: Math.max(0, stored.costLedger.knownSpend),
+          pricedAttempts: Math.max(0, Math.floor(stored.costLedger.pricedAttempts)),
+          itemSpend,
+        });
+      }
+    } catch (error) {
+      console.warn('本地养成进度恢复失败:', error);
+    } finally {
+      setHasHydrated(true);
+    }
+  }, [initialLevels]);
+
+  useEffect(() => {
+    if (!hasHydrated) return;
+    const stored: StoredSession = {
+      version: 1,
+      selectedId,
+      levels,
+      targetLevels,
+      attemptCount,
+      attempts,
+      guardianProtection,
+      costLedger,
+    };
+    try {
+      window.localStorage.setItem(sessionStorageKey, JSON.stringify(stored));
+    } catch (error) {
+      console.warn('本地养成进度保存失败:', error);
+    }
+  }, [attemptCount, attempts, costLedger, guardianProtection, hasHydrated, levels, selectedId, targetLevels]);
+
+  useEffect(() => () => {
+    if (pendingForgeTimer.current !== null) window.clearTimeout(pendingForgeTimer.current);
+    if (autoTargetTimer.current !== null) window.clearTimeout(autoTargetTimer.current);
+  }, []);
+
+  useEffect(() => {
+    if (!graduationPosterOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setGraduationPosterOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [graduationPosterOpen]);
 
   const item = items.find((entry) => entry.id === selectedId) ?? items[0];
   const level = levels[item.id] ?? item.minLevel ?? 0;
   const currentRow = item.rows?.find((row) => row.current === level);
-  const adaptiveRow = item.adaptiveRows?.find((row) => row.target === Math.min(10, level + 1));
+  const adaptiveRow = level >= (item.maxLevel ?? 10)
+    ? undefined
+    : item.adaptiveRows?.find((row) => row.target === level + 1);
 
   const totals = useMemo(() => attempts.reduce((acc, attempt) => {
     acc.total += 1;
     if (attempt.kind === 'success' || attempt.kind === 'jump') acc.success += 1;
-    if (attempt.kind === 'down' || attempt.kind === 'fail') acc.risk += 1;
+    if (attempt.kind === 'down' || attempt.kind === 'fail' || attempt.kind === 'protected') acc.risk += 1;
     return acc;
   }, { total: 0, success: 0, risk: 0 }), [attempts]);
 
@@ -342,6 +667,15 @@ export default function Home() {
   }, [levels]);
 
   const completedItems = useMemo(() => items.filter((entry) => (levels[entry.id] ?? entry.minLevel ?? 0) >= (entry.maxLevel ?? 1)).length, [levels]);
+  const burningGraduated = (levels['burning-gem'] ?? 0) >= 8;
+  const moonGraduated = (levels['moon-myth'] ?? 0) >= 9;
+  const otherItemsGraduated = items
+    .filter((entry) => entry.id !== 'burning-gem' && entry.id !== 'moon-myth')
+    .every((entry) => (levels[entry.id] ?? entry.minLevel ?? 0) >= Math.min(10, entry.maxLevel ?? 10));
+  const graduationReady = burningGraduated && moonGraduated && otherItemsGraduated;
+  const autoTargetLimit = autoTargetLimits[item.id] ?? null;
+  const targetLevel = autoTargetLimit === null ? null : Math.min(autoTargetLimit, Math.max(1, targetLevels[item.id] ?? autoTargetLimit));
+  const isAutoTargetRunning = autoTargetRun?.itemId === item.id;
 
   const outcomes = useMemo(() => {
     if (item.mode === 'draw') return (item.drawOptions ?? []).map((option) => ({ key: option.label, label: option.label, probability: option.probability, target: null, kind: 'draw' as const }));
@@ -356,6 +690,7 @@ export default function Home() {
   }, [adaptiveRow, attemptCount, currentRow, item]);
 
   function chooseItem(next: ProbabilityItem) {
+    stopAutoTargetRun();
     setSelectedId(next.id);
     setLastAttempt(null);
     setResultFeedbacks([]);
@@ -368,7 +703,8 @@ export default function Home() {
     if (activeItem.mode === 'draw') {
       available = (activeItem.drawOptions ?? []).map((option) => ({ key: option.label, label: option.label, probability: option.probability, target: null, kind: 'draw' }));
     } else if (activeItem.mode === 'adaptive') {
-      const rule = activeItem.adaptiveRows?.find((entry) => entry.target === Math.min(10, currentLevel + 1));
+      if (currentLevel >= (activeItem.maxLevel ?? 10)) return null;
+      const rule = activeItem.adaptiveRows?.find((entry) => entry.target === currentLevel + 1);
       if (!rule) return null;
       const success = rule.rates[bandIndex(count)];
       available = [
@@ -390,23 +726,26 @@ export default function Home() {
     }) ?? available[available.length - 1];
     if (!picked) return null;
 
-    const nextLevel = picked.target ?? currentLevel;
+    const protectionEnabled = activeItem.id === 'guardian-star' && guardianProtection;
+    const protectionTriggered = protectionEnabled && (picked.kind === 'down' || picked.kind === 'fail');
+    const nextLevel = protectionTriggered ? currentLevel : picked.target ?? currentLevel;
+    const baseCost = costRules[activeItem.id];
     const attempt: Attempt = {
       id: Date.now() + sequence,
       itemId: activeItem.id,
       itemName: activeItem.name,
       fromLabel,
-      resultLabel: picked.label,
+      resultLabel: protectionTriggered ? '保护生效 · 保持等级' : picked.label,
       toLabel: activeItem.mode === 'draw' ? picked.label : activeItem.mode === 'adaptive' ? `${nextLevel} 星` : `+${nextLevel}`,
       probability: picked.probability,
       roll: Number(roll.toFixed(2)),
-      kind: picked.kind,
-      cost: costRules[activeItem.id] ?? null,
+      kind: protectionTriggered ? 'protected' : picked.kind,
+      cost: baseCost === undefined ? null : baseCost + (protectionEnabled ? guardianProtectionCost : 0),
     };
     return { attempt, nextLevel };
   }
 
-  function simulate(times: number) {
+  function simulate(times: number, forceInstant = false) {
     if (isRolling) return;
     let currentLevel = level;
     let currentCount = attemptCount;
@@ -420,12 +759,15 @@ export default function Home() {
     }
     if (!generated.length) return;
     const applyResults = () => {
+      pendingForgeTimer.current = null;
       const latestAttempts = [...generated].reverse();
       if (item.mode === 'upgrade' || item.mode === 'adaptive') setLevels((current) => ({ ...current, [item.id]: currentLevel }));
       if (item.mode === 'adaptive') setAttemptCount(currentCount);
+      const generatedSpend = generated.reduce((sum, attempt) => sum + (attempt.cost ?? 0), 0);
       setCostLedger((current) => ({
-        knownSpend: current.knownSpend + generated.reduce((sum, attempt) => sum + (attempt.cost ?? 0), 0),
+        knownSpend: current.knownSpend + generatedSpend,
         pricedAttempts: current.pricedAttempts + generated.filter((attempt) => attempt.cost !== null).length,
+        itemSpend: { ...current.itemSpend, [item.id]: (current.itemSpend[item.id] ?? 0) + generatedSpend },
       }));
       setAttempts((current) => [...latestAttempts, ...current].slice(0, 120));
       const latestAttempt = latestAttempts[0];
@@ -438,23 +780,152 @@ export default function Home() {
       setIsRolling(false);
     };
 
-    if (instantUpgradeItems.has(item.id)) {
+    if (forceInstant || instantUpgradeItems.has(item.id)) {
       applyResults();
       return;
     }
 
     setIsRolling(true);
     const feedbackDelay = times === 1 ? 920 : 1280;
-    window.setTimeout(applyResults, feedbackDelay);
+    pendingForgeTimer.current = window.setTimeout(applyResults, feedbackDelay);
   }
 
-  function resetSession() {
+  function stopAutoTargetRun() {
+    if (autoTargetTimer.current !== null) {
+      window.clearTimeout(autoTargetTimer.current);
+      autoTargetTimer.current = null;
+    }
+    setAutoTargetRun(null);
+  }
+
+  function toggleAutoTargetRun() {
+    if (isAutoTargetRunning) {
+      stopAutoTargetRun();
+      return;
+    }
+    if (targetLevel === null || level >= targetLevel || isRolling) return;
+    setAutoTargetRun({ itemId: item.id, target: targetLevel });
+    simulate(1, true);
+  }
+
+  autoTargetTick.current = () => simulate(1, true);
+
+  useEffect(() => {
+    if (!autoTargetRun) return;
+    const limit = autoTargetLimits[autoTargetRun.itemId];
+    const currentLevel = levels[autoTargetRun.itemId] ?? 0;
+    const safeTarget = Math.min(limit ?? autoTargetRun.target, autoTargetRun.target);
+    if (selectedId !== autoTargetRun.itemId || limit === undefined || currentLevel >= safeTarget) {
+      setAutoTargetRun(null);
+      return;
+    }
+    autoTargetTimer.current = window.setTimeout(() => {
+      autoTargetTimer.current = null;
+      autoTargetTick.current();
+    }, 200);
+    return () => {
+      if (autoTargetTimer.current !== null) {
+        window.clearTimeout(autoTargetTimer.current);
+        autoTargetTimer.current = null;
+      }
+    };
+  }, [autoTargetRun, levels, selectedId]);
+
+  function saveGraduationPosterFile(file: File) {
+    const objectUrl = window.URL.createObjectURL(file);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = file.name;
+    link.click();
+    window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 1000);
+    setPosterStatus('saved');
+  }
+
+  function openGraduationPoster() {
+    if (!graduationReady) return;
+    const itemSpends: GraduationItemSpend[] = items.map((entry) => {
+      const currentLevel = levels[entry.id] ?? entry.minLevel ?? 0;
+      const quantity = entry.id === 'crystal-ball' || entry.id === 'moon-myth' ? 5 : 1;
+      return {
+        id: entry.id,
+        name: entry.name,
+        level: entry.mode === 'adaptive' ? `${currentLevel}★` : `+${currentLevel}`,
+        spend: (costLedger.itemSpend[entry.id] ?? 0) * quantity,
+        quantity,
+      };
+    });
+    const recordedItemSpend = items.reduce((sum, entry) => sum + (costLedger.itemSpend[entry.id] ?? 0), 0);
+    const historicalSpend = Math.max(0, costLedger.knownSpend - recordedItemSpend);
+    if (historicalSpend >= .01) {
+      itemSpends.push({ id: 'legacy-history', name: '历史记录', level: '—', spend: historicalSpend });
+    }
+    const snapshot: GraduationSnapshot = {
+      spend: itemSpends.reduce((sum, entry) => sum + entry.spend, 0),
+      itemSpends,
+      pricedAttempts: costLedger.pricedAttempts,
+      completedAt: new Intl.DateTimeFormat('zh-CN', {
+        year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+      }).format(new Date()),
+    };
+    const buildId = posterBuildSequence.current += 1;
+    graduationPosterFile.current = null;
+    setGraduationSnapshot(snapshot);
+    setPosterStatus('rendering');
+    setGraduationPosterOpen(true);
+    void createGraduationPosterFile(snapshot).then((file) => {
+      if (posterBuildSequence.current !== buildId) return;
+      graduationPosterFile.current = file;
+      setPosterStatus(file ? 'ready' : 'error');
+    }).catch(() => {
+      if (posterBuildSequence.current === buildId) setPosterStatus('error');
+    });
+  }
+
+  function shareGraduationPoster() {
+    if (!graduationSnapshot) return;
+    const file = graduationPosterFile.current;
+    const shareText = `花费 ¥${graduationSnapshot.spend.toFixed(2)} 毕业了！燃烧宝石 +8，星月神话 +9，其余项目全 10。`;
+    if (navigator.share) {
+      const canShareFile = !!file && typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] });
+      const shareData: ShareData = canShareFile
+        ? { title: '我的毕业照', text: shareText, files: [file] }
+        : { title: '我的毕业照', text: shareText };
+      void navigator.share(shareData).then(() => setPosterStatus('shared')).catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        if (file) saveGraduationPosterFile(file);
+        else setPosterStatus('error');
+      });
+      return;
+    }
+    if (file) {
+      saveGraduationPosterFile(file);
+      return;
+    }
+    void navigator.clipboard?.writeText(shareText).then(() => setPosterStatus('shared')).catch(() => setPosterStatus('error'));
+  }
+
+  function restartSession() {
+    stopAutoTargetRun();
+    if (pendingForgeTimer.current !== null) {
+      window.clearTimeout(pendingForgeTimer.current);
+      pendingForgeTimer.current = null;
+    }
+    window.localStorage.removeItem(sessionStorageKey);
+    feedbackSequence.current = 0;
+    posterBuildSequence.current += 1;
+    graduationPosterFile.current = null;
+    setGraduationPosterOpen(false);
+    setGraduationSnapshot(null);
+    setSelectedId(items[0].id);
     setLevels(initialLevels);
+    setTargetLevels({ ...autoTargetLimits });
     setAttemptCount(1);
     setAttempts([]);
+    setIsRolling(false);
     setLastAttempt(null);
     setResultFeedbacks([]);
-    setCostLedger({ knownSpend: 0, pricedAttempts: 0 });
+    setGuardianProtection(false);
+    setCostLedger({ knownSpend: 0, pricedAttempts: 0, itemSpend: {} });
   }
 
   const currentLevelPalette = levelPalette(item, level);
@@ -467,11 +938,18 @@ export default function Home() {
   const tierProgress = item.mode === 'draw' ? 0 : Math.round(((level - (item.minLevel ?? 0)) / Math.max(1, (item.maxLevel ?? 1) - (item.minLevel ?? 0))) * 100);
   const effectProfile = effectProfiles[item.id];
   const unitCost = costRules[item.id] ?? null;
+  const guardianProtectionEnabled = item.id === 'guardian-star' && guardianProtection;
+  const attemptUnitCost = unitCost === null ? null : unitCost + (guardianProtectionEnabled ? guardianProtectionCost : 0);
   const flameScale = 0.62 + (tierProgress / 100) * 0.83;
   const crownScale = 0.78 + (tierProgress / 100) * 0.38;
   const crystalScale = 0.76 + (tierProgress / 100) * 0.44;
   const harmonyScale = 0.78 + (tierProgress / 100) * 0.42;
   const talismanScale = 0.76 + (tierProgress / 100) * 0.43;
+  const compassScale = 0.76 + (tierProgress / 100) * 0.44;
+  const moonScale = 0.76 + (tierProgress / 100) * 0.46;
+  const ascensionScale = 0.76 + (tierProgress / 100) * 0.44;
+  const spiritScale = 0.76 + (tierProgress / 100) * 0.46;
+  const mophoneScale = 0.76 + (tierProgress / 100) * 0.44;
   const levelLabel = (value: number) => item.mode === 'adaptive' ? `${value}★` : item.mode === 'check' ? `${value}档` : `+${value}`;
   const usesLevelOnlyFeedback = instantUpgradeItems.has(item.id);
   const feedbackClass = !usesLevelOnlyFeedback && lastAttempt ? `echo-${outcomeStyle(lastAttempt.kind)}` : '';
@@ -480,7 +958,13 @@ export default function Home() {
   return (
     <main className={`game-forge ${isRolling ? 'is-forging' : ''}`} style={theme}>
       <header className="game-hud compact-hud cost-hud">
-        <div className="hud-cost-only"><span>已知累计花费</span><b>¥{costLedger.knownSpend.toFixed(2)}</b></div>
+        <div className="hud-cost-only">
+          <span>已知累计花费</span>
+          <b>¥{costLedger.knownSpend.toFixed(2)}</b>
+          <em>{hasHydrated ? '本地已保存' : '正在恢复进度'}</em>
+          <button type="button" className={`graduation-trigger ${graduationReady ? 'ready' : ''}`} onClick={openGraduationPoster} disabled={!hasHydrated || !graduationReady} title={graduationReady ? '生成并分享毕业海报' : '毕业条件：燃烧宝石 +8、星月神话 +9、其余项目全 10'}>毕业照</button>
+          <button type="button" onClick={restartSession} disabled={!hasHydrated}>重新计算</button>
+        </div>
       </header>
 
       <section className="forge-layout">
@@ -498,9 +982,9 @@ export default function Home() {
         </aside>
 
         <section className="forge-stage">
-          <div className={`forge-chamber fx-${effectProfile.effect} tier-${tier} ${feedbackClass}`} key={feedbackKey} style={{ '--tier-progress': `${tierProgress}%`, '--flame-scale': flameScale, '--flame-burst-scale': flameScale * 1.28, '--flame-dip-scale': flameScale * 0.9, '--crown-scale': crownScale, '--crown-entry-scale': crownScale * 0.82, '--crown-burst-scale': crownScale * 1.2, '--crystal-scale': crystalScale, '--harmony-scale': harmonyScale, '--talisman-scale': talismanScale } as CSSProperties}>
+          <div className={`forge-chamber fx-${effectProfile.effect} tier-${tier} ${feedbackClass} ${guardianProtectionEnabled ? 'protection-active' : ''}`} key={feedbackKey} style={{ '--tier-progress': `${tierProgress}%`, '--flame-scale': flameScale, '--flame-burst-scale': flameScale * 1.28, '--flame-dip-scale': flameScale * 0.9, '--crown-scale': crownScale, '--crown-entry-scale': crownScale * 0.82, '--crown-burst-scale': crownScale * 1.2, '--crystal-scale': crystalScale, '--harmony-scale': harmonyScale, '--talisman-scale': talismanScale, '--compass-scale': compassScale, '--moon-scale': moonScale, '--ascension-scale': ascensionScale, '--spirit-scale': spiritScale, '--mophone-scale': mophoneScale } as CSSProperties}>
             <div className="altar-glow" />
-            {item.mode !== 'draw' && <div className="level-route"><div className="level-focus"><span>当前等级</span><b>{levelLabel(level)}</b></div><div className="level-steps" aria-label="强化等级进度">{Array.from({ length: maxSelectable - (item.minLevel ?? 0) + 1 }, (_, index) => (item.minLevel ?? 0) + index).map((step) => <span key={step} className={step === level ? 'current' : step < level ? 'done' : ''} aria-current={step === level ? 'step' : undefined} style={{ '--step-color': levelPalette(item, step).accent } as CSSProperties}><i /><b>{step}</b></span>)}</div></div>}
+            {item.mode !== 'draw' && <div className="level-route"><div className="level-focus"><span>当前等级</span><b>{levelLabel(level)}</b></div><div className="level-steps" aria-label="强化等级进度">{Array.from({ length: maxSelectable - (item.minLevel ?? 0) + 1 }, (_, index) => (item.minLevel ?? 0) + index).map((step) => <span key={step} className={`${step === level ? 'current' : step < level ? 'done' : ''} ${isCheckpointLevel(item.id, step) ? 'checkpoint' : ''}`} aria-current={step === level ? 'step' : undefined} title={isCheckpointLevel(item.id, step) ? item.mode === 'adaptive' ? `${step} 星保级点` : `+${step} 保级点` : undefined} style={{ '--step-color': levelPalette(item, step).accent } as CSSProperties}><i /><b>{step}</b></span>)}</div></div>}
             <div className={`effect-stage tier-${tier}`}>
               <div className="effect-visual">
                 {item.id === 'burning-gem' ? (
@@ -573,6 +1057,125 @@ export default function Home() {
                     </div>
                     <div className="effect-particles talisman-sparks">{Array.from({ length: 14 }, (_, index) => <i key={index} />)}</div>
                   </>
+                ) : item.id === 'element-compass' ? (
+                  <>
+                    <div className="element-compass-art" role="img" aria-label="汇聚火水风土的元素罗盘">
+                      <div className="compass-aura"><i /><i /></div>
+                      <div className="compass-wheel">
+                        <span className="compass-ticks" />
+                        <div className="element-orbs"><i /><i /><i /><i /></div>
+                        <div className="compass-needle"><i /><b /></div>
+                        <strong className="compass-core" />
+                      </div>
+                      <div className="compass-base" />
+                    </div>
+                    <div className="effect-particles element-motes">{Array.from({ length: 16 }, (_, index) => <i key={index} />)}</div>
+                  </>
+                ) : item.id === 'moon-myth' ? (
+                  <>
+                    <div className="star-moon-art" role="img" aria-label="星轨环绕新月的星月神话">
+                      <div className="lunar-orbits"><i /><i /><i /></div>
+                      <div className="moon-clouds"><i /><i /></div>
+                      <div className="myth-moon">
+                        <span className="moon-crater one" /><span className="moon-crater two" /><span className="moon-crater three" />
+                        <b className="moon-star-core">✦</b>
+                      </div>
+                      <div className="moon-constellation"><i /><i /><i /><i /><i /><i /><i /></div>
+                    </div>
+                    <div className="effect-particles starlight-motes">{Array.from({ length: 18 }, (_, index) => <i key={index} />)}</div>
+                  </>
+                ) : item.id === 'holy-gift' ? (
+                  <>
+                    <div className="holy-gift-art" role="img" aria-label="圣光与羽翼环绕的圣之赐">
+                      <div className="gift-halo"><i /><i /><i /></div>
+                      <div className="gift-wings"><i /><i /><i /><i /></div>
+                      <div className="gift-reliquary">
+                        <span className="gift-cross"><i /><i /></span>
+                        <b className="gift-core">✦</b>
+                      </div>
+                      <div className="gift-seals"><i>2</i><i>4</i><i>6</i><i>8</i></div>
+                    </div>
+                    <div className="effect-particles gift-sparks">{Array.from({ length: 16 }, (_, index) => <i key={index} />)}</div>
+                  </>
+                ) : item.id === 'primordial-spirit' ? (
+                  <>
+                    <div className="primordial-spirit-art" role="img" aria-label="魂焰灵轮中凝聚成形的元神">
+                      <div className="spirit-halo"><i /><i /><i /></div>
+                      <div className="spirit-flames">{Array.from({ length: 8 }, (_, index) => <i key={index} />)}</div>
+                      <div className="spirit-form">
+                        <span className="spirit-head" />
+                        <span className="spirit-body" />
+                        <div className="spirit-arms"><i /><i /></div>
+                        <b className="spirit-soul-core"><i /><i /></b>
+                      </div>
+                      <div className="spirit-seals"><i>3</i><i>6</i><i>9</i></div>
+                      <div className="spirit-lotus" />
+                    </div>
+                    <div className="effect-particles soul-motes">{Array.from({ length: 18 }, (_, index) => <i key={index} />)}</div>
+                  </>
+                ) : item.id === 'mophone' ? (
+                  <>
+                    <div className="mophone-art" role="img" aria-label="环形电路中持续超频的未来 Mophone">
+                      <div className="mophone-orbits"><i /><i /><i /></div>
+                      <div className="circuit-arcs"><i /><i /><i /><i /><i /><i /></div>
+                      <div className="mophone-device">
+                        <span className="phone-speaker" />
+                        <span className="camera-array"><i /><i /><i /></span>
+                        <div className="phone-screen">
+                          <span className="screen-scan" />
+                          <div className="chip-grid">{Array.from({ length: 9 }, (_, index) => <i key={index} />)}</div>
+                          <b className="phone-core">M</b>
+                          <div className="power-bars"><i /><i /><i /><i /></div>
+                        </div>
+                      </div>
+                      <div className="mophone-seals"><i>4</i><i>6</i><i>8</i></div>
+                      <div className="charging-dock" />
+                    </div>
+                    <div className="effect-particles data-motes">{Array.from({ length: 18 }, (_, index) => <i key={index} />)}</div>
+                  </>
+                ) : item.id === 'goddess-fate' ? (
+                  <>
+                    <div className="fate-goddess-art" role="img" aria-label="在命运轮与丝线中央显现的命运女神">
+                      <div className="fate-wheel"><i /><i /><i /></div>
+                      <div className="fate-threads"><i /><i /><i /><i /><i /><i /></div>
+                      <div className="goddess-figure">
+                        <span className="goddess-crown"><i /><i /><i /></span>
+                        <span className="goddess-head" />
+                        <span className="goddess-hair"><i /><i /></span>
+                        <span className="goddess-robe" />
+                        <b className="fate-heart">◆</b>
+                      </div>
+                      <div className="fate-seals">
+                        <i className={level >= 4 ? 'unlocked' : ''}>4</i>
+                        <i className={level >= 6 ? 'unlocked' : ''}>6</i>
+                        <i className={level >= 8 ? 'unlocked' : ''}>8</i>
+                      </div>
+                    </div>
+                    <div className="effect-particles fate-motes">{Array.from({ length: 18 }, (_, index) => <i key={index} />)}</div>
+                  </>
+                ) : item.id === 'earring' ? (
+                  <>
+                    <div className="earring-relic-art" role="img" aria-label="六枚保级宝石环绕的月银双耳环">
+                      <div className="earring-aura"><i /><i /><i /></div>
+                      <div className="relic-earring left">
+                        <span className="earring-hook" />
+                        <span className="earring-cap" />
+                        <span className="earring-chain"><i /><i /><i /></span>
+                        <span className="earring-drop"><i /><i /></span>
+                      </div>
+                      <div className="relic-earring right">
+                        <span className="earring-hook" />
+                        <span className="earring-cap" />
+                        <span className="earring-chain"><i /><i /><i /></span>
+                        <span className="earring-drop"><i /><i /></span>
+                      </div>
+                      <b className="earring-resonance">✦</b>
+                      <div className="earring-seals">
+                        {[4, 6, 8, 10, 12, 14].map((checkpoint) => <i key={checkpoint} className={level >= checkpoint ? 'unlocked' : ''}>{checkpoint}</i>)}
+                      </div>
+                    </div>
+                    <div className="effect-particles earring-motes">{Array.from({ length: 16 }, (_, index) => <i key={index} />)}</div>
+                  </>
                 ) : (
                   <>
                     <div className="effect-field" />
@@ -587,14 +1190,42 @@ export default function Home() {
             </div>
             <div className="artifact-name"><span>{item.mode === 'draw' ? '等待唤醒' : canForge ? `${tierNames[tier]}境 · 等待强化` : '已臻至最高境界'}</span><h3>{item.name}</h3><div className="evolution-track" aria-label={`成长进度 ${tierProgress}%`}>{Array.from({ length: 6 }, (_, index) => <i key={index} className={index <= tier ? 'lit' : ''} />)}</div></div>
             {item.mode === 'adaptive' && <label className="star-memory"><span>星辰共鸣次数</span><input type="number" min="1" max="9999" value={attemptCount} onChange={(event) => setAttemptCount(Math.max(1, Number(event.target.value) || 1))} /><small>第 {bandIndex(attemptCount) + 1} 阶共鸣</small></label>}
-            <div className="altar-actions"><button type="button" className="secondary-action" onClick={() => simulate(10)} disabled={isRolling || !canForge}>{unitCost !== null ? `十连 · 最多 ¥${(unitCost * 10).toFixed(0)}` : '十连强化'}</button><button type="button" className="primary-action" onClick={() => simulate(1)} disabled={isRolling || !canForge}><span>{isRolling ? '强化中…' : canForge ? unitCost !== null ? `${actionLabel} · ¥${unitCost.toFixed(0)}` : actionLabel : '已经毕业'}</span></button></div>
+            {item.id === 'guardian-star' && <button type="button" className={`guardian-protection ${guardianProtection ? 'active' : ''}`} aria-pressed={guardianProtection} onClick={() => setGuardianProtection((enabled) => !enabled)} disabled={!canForge}><i>✧</i><span><b>失败保护</b><small>{guardianProtection ? '已开启 · +¥8 / 次' : '¥8 / 次 · 点击开启'}</small></span></button>}
+            <div className={`altar-actions ${autoTargetLimit !== null ? 'has-target-runner' : 'single-only'}`}>
+              {autoTargetLimit !== null && targetLevel !== null && (
+                <div className={`target-runner ${isAutoTargetRunning ? 'running' : ''}`}>
+                  <label>
+                    <span>到</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max={autoTargetLimit}
+                      value={targetLevel}
+                      disabled={isAutoTargetRunning}
+                      aria-label={`${item.name}自动强化目标等级`}
+                      onChange={(event) => {
+                        const nextTarget = Math.min(autoTargetLimit, Math.max(1, Math.floor(Number(event.target.value) || 1)));
+                        setTargetLevels((current) => ({ ...current, [item.id]: nextTarget }));
+                      }}
+                    />
+                    <span>停止</span>
+                  </label>
+                  <button type="button" onClick={toggleAutoTargetRun} disabled={!canForge || (!isAutoTargetRunning && level >= targetLevel)} title="每 0.2 秒结算一次单次强化">
+                    {isAutoTargetRunning ? '停止' : level >= targetLevel ? '已到达' : '执行'}
+                  </button>
+                </div>
+              )}
+              <button type="button" className="primary-action" onClick={() => simulate(1)} disabled={isRolling || !canForge || isAutoTargetRunning}>
+                <span>{isAutoTargetRunning ? '自动强化中 · 0.2 秒 / 次' : isRolling ? '强化中…' : canForge ? attemptUnitCost !== null ? `${actionLabel} · ¥${attemptUnitCost.toFixed(0)}` : actionLabel : '已经毕业'}</span>
+              </button>
+            </div>
           </div>
 
             {!!resultFeedbacks.length && (
               <div className="result-tooltip-stack" role="status" aria-live="polite">
                 {resultFeedbacks.map(({ id, attempt }) => (
                   <div className={`result-popover ${outcomeStyle(attempt.kind)}`} key={id}>
-                    <span>{attempt.kind === 'success' || attempt.kind === 'jump' ? '✦' : attempt.kind === 'draw' ? '◇' : '⌁'}</span>
+                    <span>{attempt.kind === 'success' || attempt.kind === 'jump' ? '✦' : attempt.kind === 'protected' ? '✧' : attempt.kind === 'draw' ? '◇' : '⌁'}</span>
                     <div><b>{attempt.resultLabel}</b><small>{attempt.fromLabel} → {attempt.toLabel}</small></div>
                     <strong>{attempt.toLabel}</strong>
                   </div>
@@ -605,11 +1236,11 @@ export default function Home() {
         </section>
 
         <aside className="session-panel">
-          <div className="session-heading"><div><span>极品号账本</span><b>BUILD COST LEDGER</b></div><button type="button" onClick={resetSession}>重置</button></div>
-          <div className="budget-total"><span>已录入规则累计花费</span><strong>¥{costLedger.knownSpend.toFixed(2)}</strong><p>宝石 3 · 王冠 5 · 水晶球 3 · 圣杯 2 · 护符 2 元 / 次</p></div>
+          <div className="session-heading"><div><span>极品号账本</span><b>BUILD COST LEDGER</b></div><button type="button" onClick={restartSession} disabled={!hasHydrated}>重新计算</button></div>
+          <div className="budget-total"><span>已录入规则累计花费</span><strong>¥{costLedger.knownSpend.toFixed(2)}</strong><p>宝石 3 · 王冠 5 · 水晶球 3 · 圣杯 2 · 护符 2 · 罗盘 5 · 星月 5 · 圣赐 5 · 元神 5 · Mophone 8 · 万象图 8 · 守护星 2（保护 +8）元 / 次</p></div>
           <div className="account-progress"><div><span>账号完成度</span><b>{accountProgress}%</b></div><i><i style={{ width: `${accountProgress}%` }} /></i><small>{completedItems} / {items.length} 项达到目标</small></div>
           <div className="stat-grid"><div><span>强化次数</span><b>{totals.total}</b></div><div><span>成功</span><b>{totals.success}</b></div><div><span>失败</span><b>{totals.risk}</b></div></div>
-          <div className="rule-roadmap"><h3>成本规则进度</h3><div className="done"><i>✓</i><span><b>升级概率</b><small>已录入官方公示</small></span></div><div className="done"><i>✓</i><span><b>五项核心道具已计价</b><small>宝石 3 · 王冠 5 · 水晶球 3 · 圣杯 2 · 护符 2</small></span></div><div><i>3</i><span><b>其余 12 项成本</b><small>已计价 {costLedger.pricedAttempts} 次 · 等待共同完善</small></span></div></div>
+          <div className="rule-roadmap"><h3>成本规则进度</h3><div className="done"><i>✓</i><span><b>升级概率</b><small>已录入官方公示</small></span></div><div className="done"><i>✓</i><span><b>{Object.keys(costRules).length} 项核心道具已计价</b><small>守护星 ¥2 / 次 · 可选保护 +¥8</small></span></div><div><i>3</i><span><b>其余 {items.length - Object.keys(costRules).length} 项成本</b><small>已计价 {costLedger.pricedAttempts} 次 · 等待共同完善</small></span></div></div>
           <div className="log-heading"><span>最近强化</span><i>{attempts.length} 次</i></div>
           <div className="history-list">
             {!attempts.length ? <div className="empty-history"><span>✦</span><b>尚未开始打造</b><p>选择左侧项目并进行第一次强化</p></div> : attempts.slice(0, 5).map((attempt, index) => (
@@ -619,6 +1250,53 @@ export default function Home() {
           <footer className="session-footer"><span><i /> 当前仅计算养成过程</span><p>未录入的花费不会被估算或虚构</p></footer>
         </aside>
       </section>
+
+      {graduationPosterOpen && graduationSnapshot && (
+        <div className="graduation-overlay" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setGraduationPosterOpen(false);
+        }}>
+          <section className="graduation-dialog" role="dialog" aria-modal="true" aria-labelledby="graduation-poster-title">
+            <button type="button" className="graduation-close" onClick={() => setGraduationPosterOpen(false)} aria-label="关闭毕业照">×</button>
+            <article className="graduation-poster graduation-ledger-poster">
+              <div className="poster-stars">{Array.from({ length: 18 }, (_, index) => <i key={index} />)}</div>
+              <header className="poster-header"><span>MYJ · BUILD GRADUATION</span><b>GRADUATED</b></header>
+              <div className="poster-heading"><small>全项目养成结算</small><h2 id="graduation-poster-title">极品号毕业照</h2></div>
+              <div className="poster-standards">
+                <span><i />燃烧宝石 +8</span>
+                <span><i />星月神话 +9</span>
+                <span><i />其余项目全 10</span>
+              </div>
+              <section className="poster-ledger">
+                <header><span>全部养成花费</span><b>{graduationSnapshot.itemSpends.length} 项</b></header>
+                <div className="poster-item-spends">
+                  {graduationSnapshot.itemSpends.map((entry) => (
+                    <div key={entry.id} className={`${entry.id === 'burning-gem' ? 'burning' : entry.id === 'moon-myth' ? 'moon' : entry.id === 'legacy-history' ? 'legacy' : ''}`}>
+                      <span><b>{entry.name}{entry.quantity && entry.quantity > 1 ? ` ×${entry.quantity}` : ''}</b><i>{entry.level}</i></span>
+                      <strong>¥{entry.spend.toFixed(2)}</strong>
+                    </div>
+                  ))}
+                </div>
+              </section>
+              <div className="poster-total">
+                <span>毕业总花费</span>
+                <strong>花费 ¥{graduationSnapshot.spend.toFixed(2)} 毕业了</strong>
+                <small>累计计价 {graduationSnapshot.pricedAttempts} 次 · 所有进度来自本地养成记录</small>
+              </div>
+              <footer className="poster-footer"><time>{graduationSnapshot.completedAt}</time><span>KEEP THE FIRE · FOLLOW THE MOON</span></footer>
+            </article>
+            <div className="graduation-actions">
+              <span className={`poster-status ${posterStatus}`}>
+                {posterStatus === 'rendering' ? '正在生成高清海报…' : posterStatus === 'ready' ? '高清海报已生成' : posterStatus === 'shared' ? '毕业照已分享' : posterStatus === 'saved' ? '毕业照已保存' : '图片生成失败，可继续分享文字'}
+              </span>
+              <div>
+                <button type="button" onClick={() => setGraduationPosterOpen(false)}>返回</button>
+                <button type="button" onClick={() => graduationPosterFile.current && saveGraduationPosterFile(graduationPosterFile.current)} disabled={!graduationPosterFile.current}>保存图片</button>
+                <button type="button" className="share-poster" onClick={shareGraduationPoster} disabled={posterStatus === 'rendering'}>分享毕业照</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
 
     </main>
   );
