@@ -68,6 +68,7 @@ type ResultFeedback = {
 
 type StoredSession = {
   version: 1;
+  costModel?: 'quantity-adjusted-v1';
   selectedId: string;
   levels: Record<string, number>;
   targetLevels: Record<string, number>;
@@ -82,7 +83,6 @@ type GraduationItemSpend = {
   name: string;
   level: string;
   spend: number;
-  quantity?: number;
 };
 
 type GraduationSnapshot = {
@@ -98,7 +98,14 @@ type AutoTargetRun = {
 };
 
 const sessionStorageKey = 'myj-forge-session-v1';
+const quantityAdjustedCostModel = 'quantity-adjusted-v1' as const;
 const autoTargetLimits: Record<string, number> = { 'burning-gem': 8, 'moon-myth': 9 };
+const itemQuantities: Record<string, number> = {
+  'crystal-ball': 5,
+  'moon-myth': 5,
+  'goddess-fate': 3,
+  earring: 2,
+};
 const outcomeKinds: OutcomeKind[] = ['success', 'jump', 'stay', 'down', 'fail', 'protected', 'draw'];
 
 function isStoredAttempt(value: unknown): value is Attempt {
@@ -232,7 +239,7 @@ async function createGraduationPosterFile(snapshot: GraduationSnapshot) {
     context.textAlign = 'left';
     context.fillStyle = '#827887';
     context.font = '500 19px "Noto Serif SC", serif';
-    context.fillText(`${entry.name}${entry.quantity && entry.quantity > 1 ? ` ×${entry.quantity}` : ''}`, x + 17, y + 31, 155);
+    context.fillText(entry.name, x + 17, y + 31, 155);
     context.fillStyle = color;
     context.font = '700 20px ui-monospace, monospace';
     context.fillText(entry.level, x + 215, y + 31, 42);
@@ -379,7 +386,7 @@ const items: ProbabilityItem[] = [
   },
   {
     id: 'crystal-ball', name: '水晶球', category: '宝石与圣器', mode: 'upgrade', symbol: '●', accent: '#65c7ff', accentSoft: '#153249',
-    description: '从 1 级开始，失败时保持当前等级。', sourceNote: '公示等级范围为 1→2 至 9→10。', minLevel: 1, maxLevel: 10,
+    description: '共 5 个，每次升级合计 ¥15（¥3 × 5），失败时保持当前等级。', sourceNote: '公示等级范围为 1→2 至 9→10。', minLevel: 1, maxLevel: 10,
     rows: stayRows(1, [100, 70, 50, 30, 20, 15, 10, 5, 1]),
   },
   {
@@ -403,7 +410,7 @@ const items: ProbabilityItem[] = [
   },
   {
     id: 'moon-myth', name: '星月神话', aliases: ['星云沙'], category: '宝石与圣器', mode: 'upgrade', symbol: '☾', accent: '#a78bfa', accentSoft: '#2a2148',
-    description: '与星云沙共用成功、不变、降级概率。', sourceNote: '两个名称在公示中列为同组。', minLevel: 0, maxLevel: 10,
+    description: '共 5 份，每次升级合计 ¥25（¥5 × 5）。', sourceNote: '与星云沙共用成功、不变、降级概率。', minLevel: 0, maxLevel: 10,
     rows: standardRows([[100, 0, 0], [90, 10, 0], [80, 10, 10], [60, 30, 10], [40, 40, 20], [30, 40, 30], [20, 45, 35], [15, 45, 40], [5, 50, 45], [2, 50, 48]]),
   },
   {
@@ -423,12 +430,12 @@ const items: ProbabilityItem[] = [
   },
   {
     id: 'goddess-fate', name: '命运女神', aliases: ['女神的祝福'], category: '装备升阶', mode: 'upgrade', symbol: '♢', accent: '#ff8fc5', accentSoft: '#421f36',
-    description: '每次升级 ¥8，+4、+6、+8 为保级点。', sourceNote: '失败时回落到最近保级点，不会跌破已达到的 +4、+6、+8。', minLevel: 0, maxLevel: 10,
+    description: '共 3 个，每次升级合计 ¥24（¥8 × 3），+4、+6、+8 为保级点。', sourceNote: '失败时回落到最近保级点，不会跌破已达到的 +4、+6、+8。', minLevel: 0, maxLevel: 10,
     rows: checkpointRows(0, [100, 100, 100, 100, 25, 25, 70, 50, 20, 5], [0, 4, 6, 8]),
   },
   {
     id: 'earring', name: '耳环', category: '装备升阶', mode: 'upgrade', symbol: '◌', accent: '#cb9bff', accentSoft: '#312047',
-    description: '每次升级 ¥8，+4、+6、+8、+10、+12、+14 为保级点。', sourceNote: '失败时回落到最近保级点，不会跌破已经达到的保级等级。', minLevel: 0, maxLevel: 15,
+    description: '共 2 个，每次升级合计 ¥16（¥8 × 2），+4、+6、+8、+10、+12、+14 为保级点。', sourceNote: '失败时回落到最近保级点，不会跌破已经达到的保级等级。', minLevel: 0, maxLevel: 15,
     rows: checkpointRows(0, [100, 100, 100, 100, 25, 25, 70, 50, 20, 5, 100, 50, 30, 20, 5], [0, 4, 6, 8, 10, 12, 14]),
   },
   {
@@ -539,6 +546,7 @@ export default function Home() {
   const [guardianProtection, setGuardianProtection] = useState(false);
   const [costLedger, setCostLedger] = useState({ knownSpend: 0, pricedAttempts: 0, itemSpend: {} as Record<string, number> });
   const [hasHydrated, setHasHydrated] = useState(false);
+  const [costDetailsOpen, setCostDetailsOpen] = useState(false);
   const [graduationPosterOpen, setGraduationPosterOpen] = useState(false);
   const [graduationSnapshot, setGraduationSnapshot] = useState<GraduationSnapshot | null>(null);
   const [posterStatus, setPosterStatus] = useState<'rendering' | 'ready' | 'shared' | 'saved' | 'error'>('rendering');
@@ -551,6 +559,14 @@ export default function Home() {
       if (!rawSession) return;
       const stored = JSON.parse(rawSession) as Partial<StoredSession>;
       if (stored.version !== 1) return;
+      const usesQuantityAdjustedCosts = stored.costModel === quantityAdjustedCostModel;
+      const restoredAttempts = Array.isArray(stored.attempts)
+        ? stored.attempts.filter(isStoredAttempt).slice(0, 120).map((attempt) => {
+          const quantity = itemQuantities[attempt.itemId] ?? 1;
+          if (usesQuantityAdjustedCosts || quantity === 1 || attempt.cost === null) return attempt;
+          return { ...attempt, cost: attempt.cost * quantity };
+        })
+        : [];
 
       if (typeof stored.selectedId === 'string' && items.some((entry) => entry.id === stored.selectedId)) {
         setSelectedId(stored.selectedId);
@@ -577,7 +593,7 @@ export default function Home() {
         setAttemptCount(Math.min(9999, Math.max(1, Math.floor(stored.attemptCount))));
       }
       if (Array.isArray(stored.attempts)) {
-        setAttempts(stored.attempts.filter(isStoredAttempt).slice(0, 120));
+        setAttempts(restoredAttempts);
       }
       if (typeof stored.guardianProtection === 'boolean') {
         setGuardianProtection(stored.guardianProtection);
@@ -597,8 +613,17 @@ export default function Home() {
             itemSpend[attempt.itemId] = (itemSpend[attempt.itemId] ?? 0) + (attempt.cost ?? 0);
           });
         }
+        let knownSpend = Math.max(0, stored.costLedger.knownSpend);
+        if (!usesQuantityAdjustedCosts) {
+          Object.entries(itemSpend).forEach(([itemId, spend]) => {
+            const quantity = itemQuantities[itemId] ?? 1;
+            if (quantity === 1) return;
+            itemSpend[itemId] = spend * quantity;
+            knownSpend += spend * (quantity - 1);
+          });
+        }
         setCostLedger({
-          knownSpend: Math.max(0, stored.costLedger.knownSpend),
+          knownSpend,
           pricedAttempts: Math.max(0, Math.floor(stored.costLedger.pricedAttempts)),
           itemSpend,
         });
@@ -614,6 +639,7 @@ export default function Home() {
     if (!hasHydrated) return;
     const stored: StoredSession = {
       version: 1,
+      costModel: quantityAdjustedCostModel,
       selectedId,
       levels,
       targetLevels,
@@ -635,13 +661,15 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!graduationPosterOpen) return;
+    if (!graduationPosterOpen && !costDetailsOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setGraduationPosterOpen(false);
+      if (event.key !== 'Escape') return;
+      setGraduationPosterOpen(false);
+      setCostDetailsOpen(false);
     };
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [graduationPosterOpen]);
+  }, [costDetailsOpen, graduationPosterOpen]);
 
   const item = items.find((entry) => entry.id === selectedId) ?? items[0];
   const level = levels[item.id] ?? item.minLevel ?? 0;
@@ -673,6 +701,22 @@ export default function Home() {
     .filter((entry) => entry.id !== 'burning-gem' && entry.id !== 'moon-myth')
     .every((entry) => (levels[entry.id] ?? entry.minLevel ?? 0) >= Math.min(10, entry.maxLevel ?? 10));
   const graduationReady = burningGraduated && moonGraduated && otherItemsGraduated;
+  const costDetailItems = items.map((entry) => {
+    const currentLevel = levels[entry.id] ?? entry.minLevel ?? 0;
+    const quantity = itemQuantities[entry.id] ?? 1;
+    const unitCost = costRules[entry.id] ?? null;
+    return {
+      id: entry.id,
+      name: entry.name,
+      level: entry.mode === 'adaptive' ? `${currentLevel}★` : `+${currentLevel}`,
+      quantity,
+      unitCost,
+      attemptCost: unitCost === null ? null : unitCost * quantity,
+      spend: costLedger.itemSpend[entry.id] ?? 0,
+    };
+  });
+  const categorizedCost = costDetailItems.reduce((sum, entry) => sum + entry.spend, 0);
+  const uncategorizedCost = Math.max(0, costLedger.knownSpend - categorizedCost);
   const autoTargetLimit = autoTargetLimits[item.id] ?? null;
   const targetLevel = autoTargetLimit === null ? null : Math.min(autoTargetLimit, Math.max(1, targetLevels[item.id] ?? autoTargetLimit));
   const isAutoTargetRunning = autoTargetRun?.itemId === item.id;
@@ -730,17 +774,18 @@ export default function Home() {
     const protectionTriggered = protectionEnabled && (picked.kind === 'down' || picked.kind === 'fail');
     const nextLevel = protectionTriggered ? currentLevel : picked.target ?? currentLevel;
     const baseCost = costRules[activeItem.id];
+    const itemQuantity = itemQuantities[activeItem.id] ?? 1;
     const attempt: Attempt = {
       id: Date.now() + sequence,
       itemId: activeItem.id,
-      itemName: activeItem.name,
+      itemName: `${activeItem.name}${itemQuantity > 1 ? ` ×${itemQuantity}` : ''}`,
       fromLabel,
       resultLabel: protectionTriggered ? '保护生效 · 保持等级' : picked.label,
       toLabel: activeItem.mode === 'draw' ? picked.label : activeItem.mode === 'adaptive' ? `${nextLevel} 星` : `+${nextLevel}`,
       probability: picked.probability,
       roll: Number(roll.toFixed(2)),
       kind: protectionTriggered ? 'protected' : picked.kind,
-      cost: baseCost === undefined ? null : baseCost + (protectionEnabled ? guardianProtectionCost : 0),
+      cost: baseCost === undefined ? null : (baseCost * itemQuantity) + (protectionEnabled ? guardianProtectionCost : 0),
     };
     return { attempt, nextLevel };
   }
@@ -845,13 +890,11 @@ export default function Home() {
     if (!graduationReady) return;
     const itemSpends: GraduationItemSpend[] = items.map((entry) => {
       const currentLevel = levels[entry.id] ?? entry.minLevel ?? 0;
-      const quantity = entry.id === 'crystal-ball' || entry.id === 'moon-myth' ? 5 : 1;
       return {
         id: entry.id,
         name: entry.name,
         level: entry.mode === 'adaptive' ? `${currentLevel}★` : `+${currentLevel}`,
-        spend: (costLedger.itemSpend[entry.id] ?? 0) * quantity,
-        quantity,
+        spend: costLedger.itemSpend[entry.id] ?? 0,
       };
     });
     const recordedItemSpend = items.reduce((sum, entry) => sum + (costLedger.itemSpend[entry.id] ?? 0), 0);
@@ -915,6 +958,7 @@ export default function Home() {
     posterBuildSequence.current += 1;
     graduationPosterFile.current = null;
     setGraduationPosterOpen(false);
+    setCostDetailsOpen(false);
     setGraduationSnapshot(null);
     setSelectedId(items[0].id);
     setLevels(initialLevels);
@@ -938,8 +982,10 @@ export default function Home() {
   const tierProgress = item.mode === 'draw' ? 0 : Math.round(((level - (item.minLevel ?? 0)) / Math.max(1, (item.maxLevel ?? 1) - (item.minLevel ?? 0))) * 100);
   const effectProfile = effectProfiles[item.id];
   const unitCost = costRules[item.id] ?? null;
+  const itemQuantity = itemQuantities[item.id] ?? 1;
   const guardianProtectionEnabled = item.id === 'guardian-star' && guardianProtection;
-  const attemptUnitCost = unitCost === null ? null : unitCost + (guardianProtectionEnabled ? guardianProtectionCost : 0);
+  const attemptUnitCost = unitCost === null ? null : (unitCost * itemQuantity) + (guardianProtectionEnabled ? guardianProtectionCost : 0);
+  const quantityCostLabel = unitCost !== null && itemQuantity > 1 ? `（¥${unitCost.toFixed(0)} × ${itemQuantity}）` : '';
   const flameScale = 0.62 + (tierProgress / 100) * 0.83;
   const crownScale = 0.78 + (tierProgress / 100) * 0.38;
   const crystalScale = 0.76 + (tierProgress / 100) * 0.44;
@@ -960,7 +1006,7 @@ export default function Home() {
       <header className="game-hud compact-hud cost-hud">
         <div className="hud-cost-only">
           <span>已知累计花费</span>
-          <b>¥{costLedger.knownSpend.toFixed(2)}</b>
+          <button type="button" className="hud-cost-detail-trigger" onClick={() => setCostDetailsOpen(true)} disabled={!hasHydrated} title="查看每个强化物品的花费明细"><b>¥{costLedger.knownSpend.toFixed(2)}</b><small>查看明细</small></button>
           <em>{hasHydrated ? '本地已保存' : '正在恢复进度'}</em>
           <button type="button" className={`graduation-trigger ${graduationReady ? 'ready' : ''}`} onClick={openGraduationPoster} disabled={!hasHydrated || !graduationReady} title={graduationReady ? '生成并分享毕业海报' : '毕业条件：燃烧宝石 +8、星月神话 +9、其余项目全 10'}>毕业照</button>
           <button type="button" onClick={restartSession} disabled={!hasHydrated}>重新计算</button>
@@ -974,7 +1020,7 @@ export default function Home() {
             {items.map((entry) => (
               <button key={entry.id} type="button" className={`item-card tier-${visualTier(entry, levels[entry.id] ?? entry.minLevel ?? 0)} ${entry.id === item.id ? 'active' : ''}`} onClick={() => chooseItem(entry)}>
                 <span className="item-symbol" style={{ '--card-accent': levelPalette(entry, levels[entry.id] ?? entry.minLevel ?? 0).accent, '--card-soft': levelPalette(entry, levels[entry.id] ?? entry.minLevel ?? 0).soft } as CSSProperties}>{entry.symbol}</span>
-                <span><b>{entry.name}</b><small>{entry.aliases?.length ? entry.aliases.join(' / ') : entry.category}</small><i className="item-meter"><i style={{ width: `${Math.round((((levels[entry.id] ?? entry.minLevel ?? 0) - (entry.minLevel ?? 0)) / Math.max(1, (entry.maxLevel ?? 1) - (entry.minLevel ?? 0))) * 100)}%` }} /></i></span>
+                <span><b>{entry.name}{(itemQuantities[entry.id] ?? 1) > 1 ? ` ×${itemQuantities[entry.id]}` : ''}</b><small>{entry.aliases?.length ? entry.aliases.join(' / ') : entry.category}</small><i className="item-meter"><i style={{ width: `${Math.round((((levels[entry.id] ?? entry.minLevel ?? 0) - (entry.minLevel ?? 0)) / Math.max(1, (entry.maxLevel ?? 1) - (entry.minLevel ?? 0))) * 100)}%` }} /></i></span>
                 <em>{entry.mode === 'draw' ? '秘宝' : entry.mode === 'adaptive' ? `${levels[entry.id] ?? 0}★` : entry.mode === 'check' ? `${levels[entry.id] ?? entry.minLevel}档` : `+${levels[entry.id] ?? entry.minLevel ?? 0}`}</em>
               </button>
             ))}
@@ -1188,7 +1234,7 @@ export default function Home() {
               {item.mode !== 'draw' && <b className="artifact-level">{levelName}</b>}
               <small className="rite-name">{effectProfile.rite}</small>
             </div>
-            <div className="artifact-name"><span>{item.mode === 'draw' ? '等待唤醒' : canForge ? `${tierNames[tier]}境 · 等待强化` : '已臻至最高境界'}</span><h3>{item.name}</h3><div className="evolution-track" aria-label={`成长进度 ${tierProgress}%`}>{Array.from({ length: 6 }, (_, index) => <i key={index} className={index <= tier ? 'lit' : ''} />)}</div></div>
+            <div className="artifact-name"><span>{item.mode === 'draw' ? '等待唤醒' : canForge ? `${tierNames[tier]}境 · 等待强化` : '已臻至最高境界'}</span><h3>{item.name}{itemQuantity > 1 ? ` ×${itemQuantity}` : ''}</h3><div className="evolution-track" aria-label={`成长进度 ${tierProgress}%`}>{Array.from({ length: 6 }, (_, index) => <i key={index} className={index <= tier ? 'lit' : ''} />)}</div></div>
             {item.mode === 'adaptive' && <label className="star-memory"><span>星辰共鸣次数</span><input type="number" min="1" max="9999" value={attemptCount} onChange={(event) => setAttemptCount(Math.max(1, Number(event.target.value) || 1))} /><small>第 {bandIndex(attemptCount) + 1} 阶共鸣</small></label>}
             {item.id === 'guardian-star' && <button type="button" className={`guardian-protection ${guardianProtection ? 'active' : ''}`} aria-pressed={guardianProtection} onClick={() => setGuardianProtection((enabled) => !enabled)} disabled={!canForge}><i>✧</i><span><b>失败保护</b><small>{guardianProtection ? '已开启 · +¥8 / 次' : '¥8 / 次 · 点击开启'}</small></span></button>}
             <div className={`altar-actions ${autoTargetLimit !== null ? 'has-target-runner' : 'single-only'}`}>
@@ -1216,7 +1262,7 @@ export default function Home() {
                 </div>
               )}
               <button type="button" className="primary-action" onClick={() => simulate(1)} disabled={isRolling || !canForge || isAutoTargetRunning}>
-                <span>{isAutoTargetRunning ? '自动强化中 · 0.2 秒 / 次' : isRolling ? '强化中…' : canForge ? attemptUnitCost !== null ? `${actionLabel} · ¥${attemptUnitCost.toFixed(0)}` : actionLabel : '已经毕业'}</span>
+                <span>{isAutoTargetRunning ? `自动强化中 · ¥${attemptUnitCost?.toFixed(0) ?? '—'} / 0.2 秒${quantityCostLabel}` : isRolling ? '强化中…' : canForge ? attemptUnitCost !== null ? `${actionLabel} · ¥${attemptUnitCost.toFixed(0)}${quantityCostLabel}` : actionLabel : '已经毕业'}</span>
               </button>
             </div>
           </div>
@@ -1237,7 +1283,7 @@ export default function Home() {
 
         <aside className="session-panel">
           <div className="session-heading"><div><span>极品号账本</span><b>BUILD COST LEDGER</b></div><button type="button" onClick={restartSession} disabled={!hasHydrated}>重新计算</button></div>
-          <div className="budget-total"><span>已录入规则累计花费</span><strong>¥{costLedger.knownSpend.toFixed(2)}</strong><p>宝石 3 · 王冠 5 · 水晶球 3 · 圣杯 2 · 护符 2 · 罗盘 5 · 星月 5 · 圣赐 5 · 元神 5 · Mophone 8 · 万象图 8 · 守护星 2（保护 +8）元 / 次</p></div>
+          <div className="budget-total"><button type="button" className="budget-detail-trigger" onClick={() => setCostDetailsOpen(true)} disabled={!hasHydrated}><span>已录入规则累计花费 <i>查看逐项明细</i></span><strong>¥{costLedger.knownSpend.toFixed(2)}</strong></button><p>宝石 3 · 王冠 5 · 圣杯 2 · 护符 2 · 罗盘 5 · 圣赐 5 · 元神 5 · Mophone 8 · 万象图 8 · 守护星 2（保护 +8）；升级合计：水晶球 15（3 × 5）· 星月 25（5 × 5）· 命运女神 24（8 × 3）· 耳环 16（8 × 2）</p></div>
           <div className="account-progress"><div><span>账号完成度</span><b>{accountProgress}%</b></div><i><i style={{ width: `${accountProgress}%` }} /></i><small>{completedItems} / {items.length} 项达到目标</small></div>
           <div className="stat-grid"><div><span>强化次数</span><b>{totals.total}</b></div><div><span>成功</span><b>{totals.success}</b></div><div><span>失败</span><b>{totals.risk}</b></div></div>
           <div className="rule-roadmap"><h3>成本规则进度</h3><div className="done"><i>✓</i><span><b>升级概率</b><small>已录入官方公示</small></span></div><div className="done"><i>✓</i><span><b>{Object.keys(costRules).length} 项核心道具已计价</b><small>守护星 ¥2 / 次 · 可选保护 +¥8</small></span></div><div><i>3</i><span><b>其余 {items.length - Object.keys(costRules).length} 项成本</b><small>已计价 {costLedger.pricedAttempts} 次 · 等待共同完善</small></span></div></div>
@@ -1250,6 +1296,41 @@ export default function Home() {
           <footer className="session-footer"><span><i /> 当前仅计算养成过程</span><p>未录入的花费不会被估算或虚构</p></footer>
         </aside>
       </section>
+
+      {costDetailsOpen && (
+        <div className="cost-detail-overlay" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setCostDetailsOpen(false);
+        }}>
+          <section className="cost-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="cost-detail-title">
+            <header>
+              <div><small>BUILD COST LEDGER</small><h2 id="cost-detail-title">强化花费明细</h2></div>
+              <button type="button" onClick={() => setCostDetailsOpen(false)} aria-label="关闭花费明细">×</button>
+            </header>
+            <div className="cost-detail-summary"><span>全部累计花费</span><strong>¥{costLedger.knownSpend.toFixed(2)}</strong><small>{costDetailItems.length} 个强化项目 · 本地实时记录</small></div>
+            <div className="cost-detail-list">
+              {costDetailItems.map((entry) => (
+                <article key={entry.id}>
+                  <div>
+                    <b>{entry.name}{entry.quantity > 1 ? ` ×${entry.quantity}` : ''}</b>
+                    <small>
+                      {entry.level} · {entry.attemptCost === null
+                        ? '未计价'
+                        : entry.id === 'guardian-star'
+                          ? '¥2 / 次 · 保护时 ¥10 / 次'
+                          : entry.quantity > 1
+                            ? `¥${entry.attemptCost.toFixed(0)} / 次（¥${entry.unitCost?.toFixed(0)} × ${entry.quantity}）`
+                            : `¥${entry.attemptCost.toFixed(0)} / 次`}
+                    </small>
+                  </div>
+                  <strong>¥{entry.spend.toFixed(2)}</strong>
+                </article>
+              ))}
+              {uncategorizedCost >= .01 && <article className="legacy"><div><b>历史未分类</b><small>旧版本中未归入具体项目的花费</small></div><strong>¥{uncategorizedCost.toFixed(2)}</strong></article>}
+            </div>
+            <footer><span>分项合计</span><strong>¥{(categorizedCost + uncategorizedCost).toFixed(2)}</strong></footer>
+          </section>
+        </div>
+      )}
 
       {graduationPosterOpen && graduationSnapshot && (
         <div className="graduation-overlay" onMouseDown={(event) => {
@@ -1271,7 +1352,7 @@ export default function Home() {
                 <div className="poster-item-spends">
                   {graduationSnapshot.itemSpends.map((entry) => (
                     <div key={entry.id} className={`${entry.id === 'burning-gem' ? 'burning' : entry.id === 'moon-myth' ? 'moon' : entry.id === 'legacy-history' ? 'legacy' : ''}`}>
-                      <span><b>{entry.name}{entry.quantity && entry.quantity > 1 ? ` ×${entry.quantity}` : ''}</b><i>{entry.level}</i></span>
+                      <span><b>{entry.name}</b><i>{entry.level}</i></span>
                       <strong>¥{entry.spend.toFixed(2)}</strong>
                     </div>
                   ))}

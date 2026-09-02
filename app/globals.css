@@ -791,3 +791,34 @@ button,input { font:inherit; } button { border:0; }
 .poster-total small { color:#625b65; font-family:sans-serif; font-size:5px; }
 .graduation-ledger-poster .poster-footer { bottom:10px; }
 @media (max-width:390px) { .graduation-ledger-poster { padding-left:15px; padding-right:15px; }.poster-item-spends { gap:4px; }.poster-item-spends>div { padding-left:5px; padding-right:5px; }.poster-total { margin-top:6px; padding-top:7px; padding-bottom:7px; } }
+
+/* 花费明细：总额可点击，并按强化项目展示精确累计金额。 */
+.hud-cost-only .hud-cost-detail-trigger { display:flex; align-items:center; gap:7px; padding:4px 8px; border-color:rgba(221,184,105,.2); background:rgba(27,24,19,.42); }
+.hud-cost-detail-trigger small { color:#88775c; font-size:7px; font-weight:500; }
+.hud-cost-only .hud-cost-detail-trigger:hover small { color:#d9bc82; }
+.budget-detail-trigger { width:100%; padding:0; border:0; color:inherit; background:transparent; text-align:left; cursor:pointer; }
+.budget-detail-trigger span { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.budget-detail-trigger span i { color:#9b8050; font-size:7px; font-style:normal; }
+.budget-detail-trigger:hover strong { color:#f0d49a; }
+.budget-detail-trigger:disabled { opacity:.45; cursor:not-allowed; }
+.cost-detail-overlay { position:fixed; inset:0; z-index:110; display:grid; place-items:center; padding:18px; background:rgba(3,5,9,.82); backdrop-filter:blur(9px); animation:graduation-overlay-in .2s ease-out; }
+.cost-detail-dialog { width:min(680px,calc(100vw - 36px)); max-height:min(790px,calc(100vh - 36px)); display:grid; grid-template-rows:auto auto minmax(0,1fr) auto; overflow:hidden; border:1px solid rgba(221,184,105,.35); border-radius:7px; color:#d9c9aa; background:radial-gradient(circle at 85% 0,rgba(172,119,241,.13),transparent 31%),linear-gradient(145deg,#171b22,#0b0f15); box-shadow:0 28px 90px rgba(0,0,0,.72); }
+.cost-detail-dialog>header { display:flex; align-items:center; justify-content:space-between; padding:18px 20px 12px; border-bottom:1px solid rgba(218,183,108,.11); }
+.cost-detail-dialog>header small { color:#766b59; font:600 7px ui-monospace,monospace; letter-spacing:.14em; }
+.cost-detail-dialog>header h2 { margin:3px 0 0; color:#ead8b2; font-family:"Noto Serif SC",serif; font-size:19px; }
+.cost-detail-dialog>header button { width:30px; height:30px; border:1px solid rgba(218,183,108,.14); border-radius:50%; color:#9b8b70; background:rgba(255,255,255,.03); cursor:pointer; }
+.cost-detail-summary { display:grid; grid-template-columns:1fr auto; align-items:end; gap:3px 12px; margin:12px 16px 10px; padding:12px 14px; border:1px solid rgba(218,179,94,.22); border-radius:4px; background:linear-gradient(120deg,rgba(114,71,28,.22),rgba(47,32,58,.3)); }
+.cost-detail-summary span { color:#8d7e65; font-size:8px; }
+.cost-detail-summary strong { grid-row:1/3; grid-column:2; align-self:center; color:#f1d597; font:700 24px "Noto Serif SC",serif; }
+.cost-detail-summary small { color:#625c53; font-size:7px; }
+.cost-detail-list { min-height:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-content:start; gap:6px; overflow:auto; padding:0 16px 12px; scrollbar-color:#665437 transparent; }
+.cost-detail-list article { min-width:0; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 11px; border:1px solid rgba(204,177,120,.1); border-radius:4px; background:rgba(3,6,10,.32); }
+.cost-detail-list article>div { min-width:0; display:grid; gap:4px; }
+.cost-detail-list article b { overflow:hidden; color:#aaa08f; font-size:9px; text-overflow:ellipsis; white-space:nowrap; }
+.cost-detail-list article small { overflow:hidden; color:#625d56; font-size:7px; line-height:1.35; text-overflow:ellipsis; white-space:nowrap; }
+.cost-detail-list article>strong { flex:none; color:#d8bd83; font:700 12px ui-monospace,monospace; }
+.cost-detail-list article.legacy { border-color:rgba(143,135,125,.14); }
+.cost-detail-dialog>footer { display:flex; align-items:center; justify-content:space-between; padding:12px 20px 15px; border-top:1px solid rgba(218,183,108,.12); color:#877a64; font-size:9px; }
+.cost-detail-dialog>footer strong { color:#efd294; font:700 17px ui-monospace,monospace; }
+@media (max-width:620px) { .cost-detail-list { grid-template-columns:1fr; }.cost-detail-dialog { max-height:calc(100vh - 20px); }.cost-detail-summary strong { font-size:20px; } }
+@media (max-width:520px) { .hud-cost-detail-trigger small { display:none; }.hud-cost-only .hud-cost-detail-trigger { padding-left:6px; padding-right:6px; } }
