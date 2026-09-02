@@ -348,11 +348,6 @@ export default function Home() {
     setRulesOpen(false);
   }
 
-  function selectLevel(next: number) {
-    setLevels((current) => ({ ...current, [item.id]: next }));
-    setLastAttempt(null);
-  }
-
   function createAttempt(activeItem: ProbabilityItem, currentLevel: number, count: number, sequence: number) {
     let available: Outcome[] = [];
     let fromLabel = activeItem.mode === 'draw' ? '触发' : `+${currentLevel}`;
@@ -485,7 +480,7 @@ export default function Home() {
 
           <div className={`forge-chamber fx-${effectProfile.effect} tier-${tier} ${lastAttempt ? `echo-${outcomeStyle(lastAttempt.kind)}` : ''}`} key={`${item.id}-${lastAttempt?.id ?? 'idle'}`} style={{ '--tier-progress': `${tierProgress}%`, '--flame-scale': flameScale, '--flame-burst-scale': flameScale * 1.28, '--flame-dip-scale': flameScale * 0.9 } as CSSProperties}>
             <div className="altar-glow" />
-            {item.mode !== 'draw' && <div className="level-route"><div className="level-focus"><span>当前等级</span><b>{levelLabel(level)}</b><i>→</i><span>目标等级</span><strong>{canForge ? nextLevelLabel : 'MAX'}</strong></div><div className="level-steps">{Array.from({ length: maxSelectable - (item.minLevel ?? 0) + 1 }, (_, index) => (item.minLevel ?? 0) + index).map((step) => <button type="button" key={step} className={step === level ? 'current' : step < level ? 'done' : ''} onClick={() => selectLevel(step)} aria-label={`选择${levelLabel(step)}`}><i /><span>{step}</span></button>)}</div></div>}
+            {item.mode !== 'draw' && <div className="level-route"><div className="level-focus"><span>当前等级</span><b>{levelLabel(level)}</b><i>→</i><span>目标等级</span><strong>{canForge ? nextLevelLabel : 'MAX'}</strong></div><div className="level-steps" aria-label="强化等级进度">{Array.from({ length: maxSelectable - (item.minLevel ?? 0) + 1 }, (_, index) => (item.minLevel ?? 0) + index).map((step) => <span key={step} className={step === level ? 'current' : step < level ? 'done' : ''} aria-current={step === level ? 'step' : undefined}><i /><b>{step}</b></span>)}</div></div>}
             <div className={`effect-stage tier-${tier}`}>
               <div className="effect-visual">
                 {item.id === 'burning-gem' ? (
