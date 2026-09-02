@@ -58,6 +58,7 @@ type Attempt = {
   probability: number;
   roll: number;
   kind: OutcomeKind;
+  cost: number | null;
 };
 
 const categories: Array<'全部' | Category> = ['全部', '宝石与圣器', '特殊强化', '装备升阶', '星级系统'];
@@ -283,6 +284,10 @@ const effectProfiles: Record<string, { effect: string; rite: string; catalyst: s
   wanxiang: { effect: 'constellation', rite: '万象演星', catalyst: '天机星轨' },
 };
 
+const costRules: Record<string, number> = {
+  'burning-gem': 3,
+};
+
 export default function Home() {
   const initialLevels = useMemo(() => Object.fromEntries(items.filter((item) => item.mode !== 'draw').map((item) => [item.id, item.minLevel ?? 0])), []);
   const [selectedId, setSelectedId] = useState(items[0].id);
@@ -294,6 +299,7 @@ export default function Home() {
   const [isRolling, setIsRolling] = useState(false);
   const [lastAttempt, setLastAttempt] = useState<Attempt | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [costLedger, setCostLedger] = useState({ knownSpend: 0, pricedAttempts: 0 });
 
   const item = items.find((entry) => entry.id === selectedId) ?? items[0];
   const level = levels[item.id] ?? item.minLevel ?? 0;
@@ -387,6 +393,7 @@ export default function Home() {
       probability: picked.probability,
       roll: Number(roll.toFixed(2)),
       kind: picked.kind,
+      cost: costRules[activeItem.id] ?? null,
     };
     return { attempt, nextLevel };
   }
@@ -408,6 +415,10 @@ export default function Home() {
     window.setTimeout(() => {
       if (item.mode === 'upgrade' || item.mode === 'adaptive') setLevels((current) => ({ ...current, [item.id]: currentLevel }));
       if (item.mode === 'adaptive') setAttemptCount(currentCount);
+      setCostLedger((current) => ({
+        knownSpend: current.knownSpend + generated.reduce((sum, attempt) => sum + (attempt.cost ?? 0), 0),
+        pricedAttempts: current.pricedAttempts + generated.filter((attempt) => attempt.cost !== null).length,
+      }));
       setAttempts((current) => [...generated.reverse(), ...current].slice(0, 120));
       setLastAttempt(generated[0]);
       setIsRolling(false);
@@ -419,6 +430,7 @@ export default function Home() {
     setAttemptCount(1);
     setAttempts([]);
     setLastAttempt(null);
+    setCostLedger({ knownSpend: 0, pricedAttempts: 0 });
   }
 
   const theme = { '--accent': item.accent, '--accent-soft': item.accentSoft } as CSSProperties;
@@ -429,10 +441,9 @@ export default function Home() {
   const tier = visualTier(item, level);
   const tierProgress = item.mode === 'draw' ? 0 : Math.round(((level - (item.minLevel ?? 0)) / Math.max(1, (item.maxLevel ?? 1) - (item.minLevel ?? 0))) * 100);
   const effectProfile = effectProfiles[item.id];
-
-  function shiftLevel(delta: number) {
-    selectLevel(Math.min(maxSelectable, Math.max(item.minLevel ?? 0, level + delta)));
-  }
+  const unitCost = costRules[item.id] ?? null;
+  const levelLabel = (value: number) => item.mode === 'adaptive' ? `${value}★` : item.mode === 'check' ? `${value}档` : `+${value}`;
+  const nextLevelLabel = levelLabel(Math.min(maxSelectable, level + 1));
 
   return (
     <main className={`game-forge ${isRolling ? 'is-forging' : ''}`} style={theme}>
@@ -441,8 +452,8 @@ export default function Home() {
           <div className="player-avatar"><span>极</span></div>
           <div><p>猫游记养成规划</p><h1>极品号打造计划</h1></div>
         </div>
-        <div className="plan-overview"><span><i /> 规则底稿 V0.1</span><b>{completedItems}/{items.length} 项毕业</b></div>
-        <div className="hud-actions"><span>总花费 <b>待规则录入</b></span><a href="http://www.pet.imop.com/html/6/13/54102.htm" target="_blank" rel="noreferrer">官方公示 ↗</a></div>
+        <div className="plan-overview"><span><i /> 规则底稿 V0.2</span><b>{completedItems}/{items.length} 项毕业</b></div>
+        <div className="hud-actions"><span>已知累计花费 <b>¥{costLedger.knownSpend.toFixed(2)}</b></span><a href="http://www.pet.imop.com/html/6/13/54102.htm" target="_blank" rel="noreferrer">官方公示 ↗</a></div>
       </header>
 
       <section className="forge-layout">
@@ -472,6 +483,7 @@ export default function Home() {
 
           <div className={`forge-chamber fx-${effectProfile.effect} tier-${tier} ${lastAttempt ? `echo-${outcomeStyle(lastAttempt.kind)}` : ''}`} key={`${item.id}-${lastAttempt?.id ?? 'idle'}`} style={{ '--tier-progress': `${tierProgress}%` } as CSSProperties}>
             <div className="altar-glow" />
+            {item.mode !== 'draw' && <div className="level-route"><div className="level-focus"><span>当前等级</span><b>{levelLabel(level)}</b><i>→</i><span>目标等级</span><strong>{canForge ? nextLevelLabel : 'MAX'}</strong></div><div className="level-steps">{Array.from({ length: maxSelectable - (item.minLevel ?? 0) + 1 }, (_, index) => (item.minLevel ?? 0) + index).map((step) => <button type="button" key={step} className={step === level ? 'current' : step < level ? 'done' : ''} onClick={() => selectLevel(step)} aria-label={`选择${levelLabel(step)}`}><i /><span>{step}</span></button>)}</div></div>}
             <div className={`effect-stage tier-${tier}`}>
               <div className="effect-visual">
                 <div className="effect-field" />
@@ -483,21 +495,14 @@ export default function Home() {
               <small className="rite-name">{effectProfile.rite}</small>
             </div>
             <div className="artifact-name"><span>{item.mode === 'draw' ? '等待唤醒' : canForge ? `${tierNames[tier]}境 · 等待强化` : '已臻至最高境界'}</span><h3>{item.name}</h3><div className="evolution-track" aria-label={`成长进度 ${tierProgress}%`}>{Array.from({ length: 6 }, (_, index) => <i key={index} className={index <= tier ? 'lit' : ''} />)}</div></div>
-            {item.mode !== 'draw' && (
-              <div className="rank-switcher" aria-label="试炼档位">
-                <button type="button" onClick={() => shiftLevel(-1)} disabled={level <= (item.minLevel ?? 0)}>−</button>
-                <div><small>试炼档位</small><b>{levelName}</b></div>
-                <button type="button" onClick={() => shiftLevel(1)} disabled={level >= maxSelectable}>＋</button>
-              </div>
-            )}
             {item.mode === 'adaptive' && <label className="star-memory"><span>星辰共鸣次数</span><input type="number" min="1" max="9999" value={attemptCount} onChange={(event) => setAttemptCount(Math.max(1, Number(event.target.value) || 1))} /><small>第 {bandIndex(attemptCount) + 1} 阶共鸣</small></label>}
           </div>
 
           <div className="forge-console">
             <div className="console-cell"><span>本次最高正向概率</span><b>{outcomes.filter((outcome) => outcome.kind === 'success' || outcome.kind === 'jump').reduce((sum, outcome) => sum + outcome.probability, 0)}%</b></div>
             <div className="console-cell"><span>强化媒介</span><b>{effectProfile.catalyst}</b></div>
-            <div className="console-cell pending-cost"><span>本次花费</span><b>待规则录入</b></div>
-            <div className="compact-actions"><button type="button" className="secondary-action" onClick={() => simulate(10)} disabled={isRolling || !canForge}>十连</button><button type="button" className="primary-action" onClick={() => simulate(1)} disabled={isRolling || !canForge}><span>{isRolling ? '演算中…' : canForge ? actionLabel : '已经毕业'}</span></button></div>
+            <div className={`console-cell pending-cost ${unitCost !== null ? 'priced' : ''}`}><span>单次升级花费</span><b>{unitCost !== null ? `¥${unitCost.toFixed(2)} / 次` : '待规则录入'}</b></div>
+            <div className="compact-actions"><button type="button" className="secondary-action" onClick={() => simulate(10)} disabled={isRolling || !canForge}>{unitCost !== null ? `十连 · ≤¥${(unitCost * 10).toFixed(0)}` : '十连'}</button><button type="button" className="primary-action" onClick={() => simulate(1)} disabled={isRolling || !canForge}><span>{isRolling ? '演算中…' : canForge ? unitCost !== null ? `${actionLabel} · ¥${unitCost.toFixed(0)}` : actionLabel : '已经毕业'}</span></button></div>
           </div>
 
             {lastAttempt && (
@@ -511,14 +516,14 @@ export default function Home() {
 
         <aside className="session-panel">
           <div className="session-heading"><div><span>极品号账本</span><b>BUILD COST LEDGER</b></div><button type="button" onClick={resetSession}>重置</button></div>
-          <div className="budget-total"><span>当前累计花费</span><strong>待规则录入</strong><p>单价、材料来源与极品标准确认后自动汇总</p></div>
+          <div className="budget-total"><span>已录入规则累计花费</span><strong>¥{costLedger.knownSpend.toFixed(2)}</strong><p>当前仅计入燃烧宝石：每次升级 ¥3</p></div>
           <div className="account-progress"><div><span>账号完成度</span><b>{accountProgress}%</b></div><i><i style={{ width: `${accountProgress}%` }} /></i><small>{completedItems} / {items.length} 项达到目标</small></div>
           <div className="stat-grid"><div><span>强化次数</span><b>{totals.total}</b></div><div><span>成功</span><b>{totals.success}</b></div><div><span>失败</span><b>{totals.risk}</b></div></div>
-          <div className="rule-roadmap"><h3>成本规则进度</h3><div className="done"><i>✓</i><span><b>升级概率</b><small>已录入官方公示</small></span></div><div><i>2</i><span><b>材料与单价</b><small>等待共同完善</small></span></div><div><i>3</i><span><b>极品号标准</b><small>等待共同确认</small></span></div></div>
+          <div className="rule-roadmap"><h3>成本规则进度</h3><div className="done"><i>✓</i><span><b>升级概率</b><small>已录入官方公示</small></span></div><div className="done"><i>✓</i><span><b>燃烧宝石</b><small>每次升级 ¥3 · 已计价 {costLedger.pricedAttempts} 次</small></span></div><div><i>3</i><span><b>其余 17 项成本</b><small>等待共同完善</small></span></div></div>
           <div className="log-heading"><span>最近强化</span><i>{attempts.length} 次</i></div>
           <div className="history-list">
             {!attempts.length ? <div className="empty-history"><span>✦</span><b>尚未开始打造</b><p>选择左侧项目并进行第一次强化</p></div> : attempts.slice(0, 5).map((attempt, index) => (
-              <article key={attempt.id} className={outcomeStyle(attempt.kind)}><header><span>第 {attempts.length - index} 次</span><time>命运值 {attempt.roll.toFixed(2)}</time></header><b>{attempt.itemName}</b><p>{attempt.fromLabel} → {attempt.toLabel}</p><footer><span>{attempt.resultLabel}</span><i>{attempt.probability}% 命运档</i></footer></article>
+              <article key={attempt.id} className={outcomeStyle(attempt.kind)}><header><span>第 {attempts.length - index} 次</span><time>{attempt.cost !== null ? `¥${attempt.cost.toFixed(2)}` : '未计价'}</time></header><b>{attempt.itemName}</b><p>{attempt.fromLabel} → {attempt.toLabel}</p><footer><span>{attempt.resultLabel}</span><i>{attempt.probability}% 命运档</i></footer></article>
             ))}
           </div>
           <footer className="session-footer"><span><i /> 当前仅计算养成过程</span><p>未录入的花费不会被估算或虚构</p></footer>
