@@ -149,7 +149,7 @@ const items: ProbabilityItem[] = [
     rows: standardRows([[100, 0, 0], [80, 10, 10], [60, 20, 20], [40, 30, 30], [30, 35, 35], [15, 40, 45], [10, 40, 50], [5, 40, 55], [2, 40, 58], [1, 40, 59]]),
   },
   {
-    id: 'annihilation-crown', name: '灭世之冠', category: '宝石与圣器', mode: 'upgrade', symbol: '♛', accent: '#ff8661', accentSoft: '#3b1c24',
+    id: 'annihilation-crown', name: '灭世之冠', category: '宝石与圣器', mode: 'upgrade', symbol: '♛', accent: '#b892ff', accentSoft: '#28172f',
     description: '失败时保持当前等级的十级强化。', sourceNote: '官方公布成功率与保持不变概率。', minLevel: 0, maxLevel: 10,
     rows: stayRows(0, [100, 80, 60, 40, 30, 20, 10, 5, 2, 1]),
   },
@@ -286,6 +286,7 @@ const effectProfiles: Record<string, { effect: string; rite: string; catalyst: s
 
 const costRules: Record<string, number> = {
   'burning-gem': 3,
+  'annihilation-crown': 5,
 };
 
 export default function Home() {
@@ -407,7 +408,11 @@ export default function Home() {
     }
     if (!generated.length) return;
     setIsRolling(true);
-    const feedbackDelay = item.id === 'burning-gem' ? (times === 1 ? 360 : 620) : (times === 1 ? 920 : 1280);
+    const feedbackDelay = item.id === 'burning-gem'
+      ? (times === 1 ? 360 : 620)
+      : item.id === 'annihilation-crown'
+        ? (times === 1 ? 520 : 760)
+        : (times === 1 ? 920 : 1280);
     window.setTimeout(() => {
       if (item.mode === 'upgrade' || item.mode === 'adaptive') setLevels((current) => ({ ...current, [item.id]: currentLevel }));
       if (item.mode === 'adaptive') setAttemptCount(currentCount);
@@ -439,6 +444,7 @@ export default function Home() {
   const effectProfile = effectProfiles[item.id];
   const unitCost = costRules[item.id] ?? null;
   const flameScale = 0.62 + (tierProgress / 100) * 0.83;
+  const crownScale = 0.78 + (tierProgress / 100) * 0.38;
   const levelLabel = (value: number) => item.mode === 'adaptive' ? `${value}★` : item.mode === 'check' ? `${value}档` : `+${value}`;
   const nextLevelLabel = levelLabel(Math.min(maxSelectable, level + 1));
 
@@ -478,7 +484,7 @@ export default function Home() {
             <div className="hero-status"><div className={`tier-badge tier-${tier}`}><small>当前境界</small><b>{item.mode === 'draw' ? '秘宝' : tierNames[tier]}</b></div><button type="button" className="rules-button" onClick={() => setRulesOpen(true)}>规则详情</button></div>
           </header>
 
-          <div className={`forge-chamber fx-${effectProfile.effect} tier-${tier} ${lastAttempt ? `echo-${outcomeStyle(lastAttempt.kind)}` : ''}`} key={`${item.id}-${lastAttempt?.id ?? 'idle'}`} style={{ '--tier-progress': `${tierProgress}%`, '--flame-scale': flameScale, '--flame-burst-scale': flameScale * 1.28, '--flame-dip-scale': flameScale * 0.9 } as CSSProperties}>
+          <div className={`forge-chamber fx-${effectProfile.effect} tier-${tier} ${lastAttempt ? `echo-${outcomeStyle(lastAttempt.kind)}` : ''}`} key={`${item.id}-${lastAttempt?.id ?? 'idle'}`} style={{ '--tier-progress': `${tierProgress}%`, '--flame-scale': flameScale, '--flame-burst-scale': flameScale * 1.28, '--flame-dip-scale': flameScale * 0.9, '--crown-scale': crownScale, '--crown-entry-scale': crownScale * 0.82, '--crown-burst-scale': crownScale * 1.2 } as CSSProperties}>
             <div className="altar-glow" />
             {item.mode !== 'draw' && <div className="level-route"><div className="level-focus"><span>当前等级</span><b>{levelLabel(level)}</b><i>→</i><span>目标等级</span><strong>{canForge ? nextLevelLabel : 'MAX'}</strong></div><div className="level-steps" aria-label="强化等级进度">{Array.from({ length: maxSelectable - (item.minLevel ?? 0) + 1 }, (_, index) => (item.minLevel ?? 0) + index).map((step) => <span key={step} className={step === level ? 'current' : step < level ? 'done' : ''} aria-current={step === level ? 'step' : undefined}><i /><b>{step}</b></span>)}</div></div>}
             <div className={`effect-stage tier-${tier}`}>
@@ -496,6 +502,20 @@ export default function Home() {
                       <div className="gem-fire fire-front">{Array.from({ length: 4 }, (_, index) => <i key={index} />)}</div>
                     </div>
                     <div className="effect-particles burning-embers">{Array.from({ length: 18 }, (_, index) => <i key={index} />)}</div>
+                  </>
+                ) : item.id === 'annihilation-crown' ? (
+                  <>
+                    <div className="annihilation-crown-art" role="img" aria-label="被暗雷环绕的灭世之冠">
+                      <div className="crown-eclipse"><i /><i /></div>
+                      <div className="crown-lightning"><i /><i /><i /><i /></div>
+                      <div className="crown-body">
+                        <div className="crown-peaks"><i /><i /><i /><i /><i /></div>
+                        <span className="crown-band" />
+                        <b className="crown-core" />
+                      </div>
+                      <div className="crown-shockwave" />
+                    </div>
+                    <div className="effect-particles crown-ash">{Array.from({ length: 14 }, (_, index) => <i key={index} />)}</div>
                   </>
                 ) : (
                   <>
@@ -525,10 +545,10 @@ export default function Home() {
 
         <aside className="session-panel">
           <div className="session-heading"><div><span>极品号账本</span><b>BUILD COST LEDGER</b></div><button type="button" onClick={resetSession}>重置</button></div>
-          <div className="budget-total"><span>已录入规则累计花费</span><strong>¥{costLedger.knownSpend.toFixed(2)}</strong><p>当前仅计入燃烧宝石：每次升级 ¥3</p></div>
+          <div className="budget-total"><span>已录入规则累计花费</span><strong>¥{costLedger.knownSpend.toFixed(2)}</strong><p>燃烧宝石 ¥3 / 次 · 灭世之冠 ¥5 / 次</p></div>
           <div className="account-progress"><div><span>账号完成度</span><b>{accountProgress}%</b></div><i><i style={{ width: `${accountProgress}%` }} /></i><small>{completedItems} / {items.length} 项达到目标</small></div>
           <div className="stat-grid"><div><span>强化次数</span><b>{totals.total}</b></div><div><span>成功</span><b>{totals.success}</b></div><div><span>失败</span><b>{totals.risk}</b></div></div>
-          <div className="rule-roadmap"><h3>成本规则进度</h3><div className="done"><i>✓</i><span><b>升级概率</b><small>已录入官方公示</small></span></div><div className="done"><i>✓</i><span><b>燃烧宝石</b><small>每次升级 ¥3 · 已计价 {costLedger.pricedAttempts} 次</small></span></div><div><i>3</i><span><b>其余 17 项成本</b><small>等待共同完善</small></span></div></div>
+          <div className="rule-roadmap"><h3>成本规则进度</h3><div className="done"><i>✓</i><span><b>升级概率</b><small>已录入官方公示</small></span></div><div className="done"><i>✓</i><span><b>燃烧宝石 · 灭世之冠</b><small>¥3 / 次 · ¥5 / 次 · 已计价 {costLedger.pricedAttempts} 次</small></span></div><div><i>3</i><span><b>其余 16 项成本</b><small>等待共同完善</small></span></div></div>
           <div className="log-heading"><span>最近强化</span><i>{attempts.length} 次</i></div>
           <div className="history-list">
             {!attempts.length ? <div className="empty-history"><span>✦</span><b>尚未开始打造</b><p>选择左侧项目并进行第一次强化</p></div> : attempts.slice(0, 5).map((attempt, index) => (
