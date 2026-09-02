@@ -293,6 +293,7 @@ export default function Home() {
   const [category, setCategory] = useState<'全部' | Category>('全部');
   const [isRolling, setIsRolling] = useState(false);
   const [lastAttempt, setLastAttempt] = useState<Attempt | null>(null);
+  const [rulesOpen, setRulesOpen] = useState(false);
 
   const item = items.find((entry) => entry.id === selectedId) ?? items[0];
   const level = levels[item.id] ?? item.minLevel ?? 0;
@@ -312,6 +313,17 @@ export default function Home() {
     return acc;
   }, { total: 0, success: 0, risk: 0 }), [attempts]);
 
+  const accountProgress = useMemo(() => {
+    const progress = items.map((entry) => {
+      const min = entry.minLevel ?? 0;
+      const max = entry.maxLevel ?? min + 1;
+      return ((levels[entry.id] ?? min) - min) / Math.max(1, max - min);
+    });
+    return Math.round((progress.reduce((sum, value) => sum + value, 0) / progress.length) * 100);
+  }, [levels]);
+
+  const completedItems = useMemo(() => items.filter((entry) => (levels[entry.id] ?? entry.minLevel ?? 0) >= (entry.maxLevel ?? 1)).length, [levels]);
+
   const outcomes = useMemo(() => {
     if (item.mode === 'draw') return (item.drawOptions ?? []).map((option) => ({ key: option.label, label: option.label, probability: option.probability, target: null, kind: 'draw' as const }));
     if (item.mode === 'adaptive' && adaptiveRow) {
@@ -327,6 +339,7 @@ export default function Home() {
   function chooseItem(next: ProbabilityItem) {
     setSelectedId(next.id);
     setLastAttempt(null);
+    setRulesOpen(false);
   }
 
   function selectLevel(next: number) {
@@ -423,18 +436,18 @@ export default function Home() {
 
   return (
     <main className={`game-forge ${isRolling ? 'is-forging' : ''}`} style={theme}>
-      <header className="game-hud">
+      <header className="game-hud compact-hud">
         <div className="player-block">
-          <div className="player-avatar"><span>喵</span><i>67</i></div>
-          <div><p>星月旅团</p><h1>猫游记 · 天穹工坊</h1></div>
+          <div className="player-avatar"><span>极</span></div>
+          <div><p>猫游记养成规划</p><h1>极品号打造计划</h1></div>
         </div>
-        <nav className="world-tabs" aria-label="工坊导航"><button className="active">强化祭坛</button><button>冒险图鉴</button><button>旅团仓库</button></nav>
-        <div className="wallet"><span><i>◈</i><b>8,888</b></span><span><i>●</i><b>238,400</b></span><a href="http://www.pet.imop.com/html/6/13/54102.htm" target="_blank" rel="noreferrer">规则公示</a></div>
+        <div className="plan-overview"><span><i /> 规则底稿 V0.1</span><b>{completedItems}/{items.length} 项毕业</b></div>
+        <div className="hud-actions"><span>总花费 <b>待规则录入</b></span><a href="http://www.pet.imop.com/html/6/13/54102.htm" target="_blank" rel="noreferrer">官方公示 ↗</a></div>
       </header>
 
       <section className="forge-layout">
         <aside className="catalog-panel">
-          <div className="catalog-heading"><div><span>旅团背包</span><b>{items.length}/18</b></div><small>选择要锻造的道具</small></div>
+          <div className="catalog-heading"><div><span>培养清单</span><b>{items.length} 项</b></div><small>逐项打造，最终汇总账号成本</small></div>
           <label className="search-box"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索道具或别名" /></label>
           <div className="category-list" aria-label="道具分类">
             {categories.map((entry) => <button key={entry} type="button" className={category === entry ? 'active' : ''} onClick={() => setCategory(entry)}>{entry}</button>)}
@@ -443,7 +456,7 @@ export default function Home() {
             {visibleItems.map((entry) => (
               <button key={entry.id} type="button" className={`item-card tier-${visualTier(entry, levels[entry.id] ?? entry.minLevel ?? 0)} ${entry.id === item.id ? 'active' : ''}`} onClick={() => chooseItem(entry)}>
                 <span className="item-symbol" style={{ '--card-accent': entry.accent, '--card-soft': entry.accentSoft } as CSSProperties}>{entry.symbol}</span>
-                <span><b>{entry.name}</b><small>{entry.aliases?.length ? entry.aliases.join(' / ') : entry.category}</small></span>
+                <span><b>{entry.name}</b><small>{entry.aliases?.length ? entry.aliases.join(' / ') : entry.category}</small><i className="item-meter"><i style={{ width: `${Math.round((((levels[entry.id] ?? entry.minLevel ?? 0) - (entry.minLevel ?? 0)) / Math.max(1, (entry.maxLevel ?? 1) - (entry.minLevel ?? 0))) * 100)}%` }} /></i></span>
                 <em>{entry.mode === 'draw' ? '秘宝' : entry.mode === 'adaptive' ? `${levels[entry.id] ?? 0}★` : entry.mode === 'check' ? `${levels[entry.id] ?? entry.minLevel}档` : `+${levels[entry.id] ?? entry.minLevel ?? 0}`}</em>
               </button>
             ))}
@@ -452,9 +465,9 @@ export default function Home() {
         </aside>
 
         <section className="forge-stage">
-          <header className="item-hero">
+          <header className="item-hero compact-hero">
             <div><div className="eyebrow"><span>{item.category}</span><i>{item.mode === 'draw' ? '远古秘宝' : item.mode === 'adaptive' ? '星辰遗物' : item.mode === 'check' ? '祝福仪式' : '可成长装备'}</i></div><h2>{item.name}</h2><p>{item.aliases?.length ? `古称：${item.aliases.join('、')} · ` : ''}{item.description}</p></div>
-            <div className="hero-status"><div className={`tier-badge tier-${tier}`}><small>道具境界</small><b>{item.mode === 'draw' ? '秘宝' : tierNames[tier]}</b></div><div className="independent-badge"><b>命运独立</b><span>每次锻造重新判定</span></div></div>
+            <div className="hero-status"><div className={`tier-badge tier-${tier}`}><small>当前境界</small><b>{item.mode === 'draw' ? '秘宝' : tierNames[tier]}</b></div><button type="button" className="rules-button" onClick={() => setRulesOpen(true)}>规则详情</button></div>
           </header>
 
           <div className={`forge-chamber fx-${effectProfile.effect} tier-${tier} ${lastAttempt ? `echo-${outcomeStyle(lastAttempt.kind)}` : ''}`} key={`${item.id}-${lastAttempt?.id ?? 'idle'}`} style={{ '--tier-progress': `${tierProgress}%` } as CSSProperties}>
@@ -480,25 +493,11 @@ export default function Home() {
             {item.mode === 'adaptive' && <label className="star-memory"><span>星辰共鸣次数</span><input type="number" min="1" max="9999" value={attemptCount} onChange={(event) => setAttemptCount(Math.max(1, Number(event.target.value) || 1))} /><small>第 {bandIndex(attemptCount) + 1} 阶共鸣</small></label>}
           </div>
 
-          <div className="ritual-dock">
-            <section className="offering-panel">
-              <div className="section-title"><div><span>✧</span><h3>锻造祭品</h3></div><small>试炼场无限供应</small></div>
-              <div className="offering-slots">
-                <div><i>{item.symbol}</i><span>主道具</span><b>{item.name}</b></div>
-                <div><i>✦</i><span>{item.mode === 'draw' ? '唤灵媒介' : item.mode === 'check' ? '祈愿媒介' : '强化媒介'}</span><b>{effectProfile.catalyst}</b></div>
-                <div><i>●</i><span>锻造费用</span><b>{item.mode === 'draw' ? '1,200' : `${600 + level * 240}`} 金</b></div>
-              </div>
-            </section>
-            <section className="omen-panel">
-              <div className="section-title"><div><span>☾</span><h3>命运预兆</h3></div><small>{item.sourceNote}</small></div>
-              {!outcomes.length ? <div className="maxed-message"><b>MAX</b><span>这件道具已经完成最终成长</span></div> : <div className="omen-list">{outcomes.map((outcome) => <div className={outcomeStyle(outcome.kind)} key={outcome.key}><span>{outcome.label}</span><b>{outcome.probability}%</b></div>)}</div>}
-            </section>
-          </div>
-
-          <div className="forge-actions">
-            <button type="button" className="secondary-action" onClick={() => simulate(10)} disabled={isRolling || !canForge}>十连锻造</button>
-            <button type="button" className="primary-action" onClick={() => simulate(1)} disabled={isRolling || !canForge}><i>✦</i><span>{isRolling ? '命运交汇中…' : canForge ? actionLabel : '已经满级'}</span><i>✦</i></button>
-            <p>试炼场不会消耗真实游戏道具</p>
+          <div className="forge-console">
+            <div className="console-cell"><span>本次最高正向概率</span><b>{outcomes.filter((outcome) => outcome.kind === 'success' || outcome.kind === 'jump').reduce((sum, outcome) => sum + outcome.probability, 0)}%</b></div>
+            <div className="console-cell"><span>强化媒介</span><b>{effectProfile.catalyst}</b></div>
+            <div className="console-cell pending-cost"><span>本次花费</span><b>待规则录入</b></div>
+            <div className="compact-actions"><button type="button" className="secondary-action" onClick={() => simulate(10)} disabled={isRolling || !canForge}>十连</button><button type="button" className="primary-action" onClick={() => simulate(1)} disabled={isRolling || !canForge}><span>{isRolling ? '演算中…' : canForge ? actionLabel : '已经毕业'}</span></button></div>
           </div>
 
             {lastAttempt && (
@@ -508,32 +507,25 @@ export default function Home() {
               </div>
             )}
 
-            <details className="rule-scroll">
-              <summary><span>冒险者公会 · 锻造规则卷轴</span><small>展开查看官方公示概率</small></summary>
-              <section className="table-card">
-              {item.mode === 'draw' ? (
-                <div className="rules-table draw-table"><div className="rules-head"><span>结果</span><span>概率</span></div>{item.drawOptions?.map((option) => <div className="rules-line" key={option.label}><b>{option.label}</b><span>{option.probability}%</span></div>)}</div>
-              ) : item.mode === 'adaptive' ? (
-                <div className="rules-table adaptive-table"><div className="rules-head"><span>目标</span><span>≤40</span><span>41–80</span><span>81–150</span><span>&gt;150</span><span>失败后</span></div>{item.adaptiveRows?.map((row) => <div className={`rules-line ${row.target === level + 1 ? 'current' : ''}`} key={row.target}><b>{row.target}★</b>{row.rates.map((rate, index) => <span key={index}>{rate}%</span>)}<span>{row.failureTo}★{row.failureNote ? ` · ${row.failureNote}` : ''}</span></div>)}</div>
-              ) : (
-                <div className="rules-table level-table"><div className="rules-head"><span>当前</span><span>目标</span><span>结果分布</span></div>{item.rows?.map((row) => <div className={`rules-line ${row.current === level ? 'current' : ''}`} key={row.current}><b>+{row.current}</b><span>{row.target === null ? '—' : `+${row.target}`}</span><span>{row.outcomes.map((outcome) => `${outcome.label} ${outcome.probability}%`).join(' · ')}</span></div>)}</div>
-              )}
-              </section>
-            </details>
         </section>
 
         <aside className="session-panel">
-          <div className="session-heading"><div><span>冒险战报</span><b>FORGE CHRONICLE</b></div><button type="button" onClick={resetSession}>重置旅程</button></div>
-          <div className="stat-grid"><div><span>锻造</span><b>{totals.total}</b></div><div><span>祝福</span><b>{totals.success}</b></div><div><span>厄运</span><b>{totals.risk}</b></div></div>
-          <div className="log-heading"><span>工坊回响</span><i>{attempts.length}/120</i></div>
+          <div className="session-heading"><div><span>极品号账本</span><b>BUILD COST LEDGER</b></div><button type="button" onClick={resetSession}>重置</button></div>
+          <div className="budget-total"><span>当前累计花费</span><strong>待规则录入</strong><p>单价、材料来源与极品标准确认后自动汇总</p></div>
+          <div className="account-progress"><div><span>账号完成度</span><b>{accountProgress}%</b></div><i><i style={{ width: `${accountProgress}%` }} /></i><small>{completedItems} / {items.length} 项达到目标</small></div>
+          <div className="stat-grid"><div><span>强化次数</span><b>{totals.total}</b></div><div><span>成功</span><b>{totals.success}</b></div><div><span>失败</span><b>{totals.risk}</b></div></div>
+          <div className="rule-roadmap"><h3>成本规则进度</h3><div className="done"><i>✓</i><span><b>升级概率</b><small>已录入官方公示</small></span></div><div><i>2</i><span><b>材料与单价</b><small>等待共同完善</small></span></div><div><i>3</i><span><b>极品号标准</b><small>等待共同确认</small></span></div></div>
+          <div className="log-heading"><span>最近强化</span><i>{attempts.length} 次</i></div>
           <div className="history-list">
-            {!attempts.length ? <div className="empty-history"><span>✦</span><b>祭坛仍在沉睡</b><p>第一次锻造会唤醒这里的记录</p></div> : attempts.map((attempt, index) => (
+            {!attempts.length ? <div className="empty-history"><span>✦</span><b>尚未开始打造</b><p>选择左侧项目并进行第一次强化</p></div> : attempts.slice(0, 5).map((attempt, index) => (
               <article key={attempt.id} className={outcomeStyle(attempt.kind)}><header><span>第 {attempts.length - index} 次</span><time>命运值 {attempt.roll.toFixed(2)}</time></header><b>{attempt.itemName}</b><p>{attempt.fromLabel} → {attempt.toLabel}</p><footer><span>{attempt.resultLabel}</span><i>{attempt.probability}% 命运档</i></footer></article>
             ))}
           </div>
-          <footer className="session-footer"><span><i /> 公会规则已校准</span><p>所有判定依据官方《概率公示Ⅱ》</p></footer>
+          <footer className="session-footer"><span><i /> 当前仅计算养成过程</span><p>未录入的花费不会被估算或虚构</p></footer>
         </aside>
       </section>
+
+      {rulesOpen && <div className="rules-modal" role="dialog" aria-modal="true" aria-label={`${item.name}规则详情`} onMouseDown={(event) => { if (event.target === event.currentTarget) setRulesOpen(false); }}><section><header><div><small>官方概率底稿</small><h2>{item.name}</h2></div><button type="button" onClick={() => setRulesOpen(false)} aria-label="关闭规则">×</button></header><p>{item.sourceNote}</p><div className="table-card">{item.mode === 'draw' ? <div className="rules-table draw-table"><div className="rules-head"><span>结果</span><span>概率</span></div>{item.drawOptions?.map((option) => <div className="rules-line" key={option.label}><b>{option.label}</b><span>{option.probability}%</span></div>)}</div> : item.mode === 'adaptive' ? <div className="rules-table adaptive-table"><div className="rules-head"><span>目标</span><span>≤40</span><span>41–80</span><span>81–150</span><span>&gt;150</span><span>失败后</span></div>{item.adaptiveRows?.map((row) => <div className={`rules-line ${row.target === level + 1 ? 'current' : ''}`} key={row.target}><b>{row.target}★</b>{row.rates.map((rate, index) => <span key={index}>{rate}%</span>)}<span>{row.failureTo}★{row.failureNote ? ` · ${row.failureNote}` : ''}</span></div>)}</div> : <div className="rules-table level-table"><div className="rules-head"><span>当前</span><span>目标</span><span>结果分布</span></div>{item.rows?.map((row) => <div className={`rules-line ${row.current === level ? 'current' : ''}`} key={row.current}><b>+{row.current}</b><span>{row.target === null ? '—' : `+${row.target}`}</span><span>{row.outcomes.map((outcome) => `${outcome.label} ${outcome.probability}%`).join(' · ')}</span></div>)}</div>}</div></section></div>}
     </main>
   );
 }

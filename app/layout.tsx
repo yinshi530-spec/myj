@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: '猫游记 · 天穹工坊',
-  description: '覆盖官方《概率公示Ⅱ》18 组道具的强化、升阶与祈愿冒险。',
+  title: '猫游记 · 极品号打造计划',
+  description: '从零记录 18 项核心养成，逐步核算打造极品号所需的真实花费。',
 };
 
 export default function RootLayout({
