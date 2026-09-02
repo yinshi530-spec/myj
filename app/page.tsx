@@ -442,6 +442,7 @@ export default function Home() {
   const tierProgress = item.mode === 'draw' ? 0 : Math.round(((level - (item.minLevel ?? 0)) / Math.max(1, (item.maxLevel ?? 1) - (item.minLevel ?? 0))) * 100);
   const effectProfile = effectProfiles[item.id];
   const unitCost = costRules[item.id] ?? null;
+  const flameScale = 0.62 + (tierProgress / 100) * 0.83;
   const levelLabel = (value: number) => item.mode === 'adaptive' ? `${value}★` : item.mode === 'check' ? `${value}档` : `+${value}`;
   const nextLevelLabel = levelLabel(Math.min(maxSelectable, level + 1));
 
@@ -481,7 +482,7 @@ export default function Home() {
             <div className="hero-status"><div className={`tier-badge tier-${tier}`}><small>当前境界</small><b>{item.mode === 'draw' ? '秘宝' : tierNames[tier]}</b></div><button type="button" className="rules-button" onClick={() => setRulesOpen(true)}>规则详情</button></div>
           </header>
 
-          <div className={`forge-chamber fx-${effectProfile.effect} tier-${tier} ${lastAttempt ? `echo-${outcomeStyle(lastAttempt.kind)}` : ''}`} key={`${item.id}-${lastAttempt?.id ?? 'idle'}`} style={{ '--tier-progress': `${tierProgress}%` } as CSSProperties}>
+          <div className={`forge-chamber fx-${effectProfile.effect} tier-${tier} ${lastAttempt ? `echo-${outcomeStyle(lastAttempt.kind)}` : ''}`} key={`${item.id}-${lastAttempt?.id ?? 'idle'}`} style={{ '--tier-progress': `${tierProgress}%`, '--flame-scale': flameScale, '--flame-burst-scale': flameScale * 1.28, '--flame-dip-scale': flameScale * 0.9 } as CSSProperties}>
             <div className="altar-glow" />
             {item.mode !== 'draw' && <div className="level-route"><div className="level-focus"><span>当前等级</span><b>{levelLabel(level)}</b><i>→</i><span>目标等级</span><strong>{canForge ? nextLevelLabel : 'MAX'}</strong></div><div className="level-steps">{Array.from({ length: maxSelectable - (item.minLevel ?? 0) + 1 }, (_, index) => (item.minLevel ?? 0) + index).map((step) => <button type="button" key={step} className={step === level ? 'current' : step < level ? 'done' : ''} onClick={() => selectLevel(step)} aria-label={`选择${levelLabel(step)}`}><i /><span>{step}</span></button>)}</div></div>}
             <div className={`effect-stage tier-${tier}`}>
@@ -496,13 +497,7 @@ export default function Home() {
             </div>
             <div className="artifact-name"><span>{item.mode === 'draw' ? '等待唤醒' : canForge ? `${tierNames[tier]}境 · 等待强化` : '已臻至最高境界'}</span><h3>{item.name}</h3><div className="evolution-track" aria-label={`成长进度 ${tierProgress}%`}>{Array.from({ length: 6 }, (_, index) => <i key={index} className={index <= tier ? 'lit' : ''} />)}</div></div>
             {item.mode === 'adaptive' && <label className="star-memory"><span>星辰共鸣次数</span><input type="number" min="1" max="9999" value={attemptCount} onChange={(event) => setAttemptCount(Math.max(1, Number(event.target.value) || 1))} /><small>第 {bandIndex(attemptCount) + 1} 阶共鸣</small></label>}
-          </div>
-
-          <div className="forge-console">
-            <div className="console-cell"><span>本次最高正向概率</span><b>{outcomes.filter((outcome) => outcome.kind === 'success' || outcome.kind === 'jump').reduce((sum, outcome) => sum + outcome.probability, 0)}%</b></div>
-            <div className="console-cell"><span>强化媒介</span><b>{effectProfile.catalyst}</b></div>
-            <div className={`console-cell pending-cost ${unitCost !== null ? 'priced' : ''}`}><span>单次升级花费</span><b>{unitCost !== null ? `¥${unitCost.toFixed(2)} / 次` : '待规则录入'}</b></div>
-            <div className="compact-actions"><button type="button" className="secondary-action" onClick={() => simulate(10)} disabled={isRolling || !canForge}>{unitCost !== null ? `十连 · ≤¥${(unitCost * 10).toFixed(0)}` : '十连'}</button><button type="button" className="primary-action" onClick={() => simulate(1)} disabled={isRolling || !canForge}><span>{isRolling ? '演算中…' : canForge ? unitCost !== null ? `${actionLabel} · ¥${unitCost.toFixed(0)}` : actionLabel : '已经毕业'}</span></button></div>
+            <div className="altar-actions"><button type="button" className="secondary-action" onClick={() => simulate(10)} disabled={isRolling || !canForge}>{unitCost !== null ? `十连 · 最多 ¥${(unitCost * 10).toFixed(0)}` : '十连强化'}</button><button type="button" className="primary-action" onClick={() => simulate(1)} disabled={isRolling || !canForge}><span>{isRolling ? '强化中…' : canForge ? unitCost !== null ? `${actionLabel} · ¥${unitCost.toFixed(0)}` : actionLabel : '已经毕业'}</span></button></div>
           </div>
 
             {lastAttempt && (
