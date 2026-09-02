@@ -167,11 +167,6 @@ const items: ProbabilityItem[] = [
     rows: stayRows(1, [100, 85, 70, 55, 40, 25, 15, 5, 1]),
   },
   {
-    id: 'sacred-chain', name: '圣器之链', category: '宝石与圣器', mode: 'upgrade', symbol: '∞', accent: '#e8c07a', accentSoft: '#372c1e',
-    description: '失败时保持当前等级的圣器强化。', sourceNote: '官方公布成功率与保持不变概率。', minLevel: 1, maxLevel: 10,
-    rows: stayRows(1, [100, 85, 70, 55, 40, 25, 15, 5, 1]),
-  },
-  {
     id: 'mystic-talisman', name: '神秘护符', category: '宝石与圣器', mode: 'upgrade', symbol: '✦', accent: '#5ddbb0', accentSoft: '#163c35',
     description: '官方只公布每级升级成功率。', sourceNote: '失败后果未在公示表中说明；Mock 失败时不改等级。', minLevel: 0, maxLevel: 10,
     rows: successOnlyRows(0, [100, 100, 90, 80, 50, 50, 30, 15, 10, 2]),
@@ -271,7 +266,6 @@ const effectProfiles: Record<string, { effect: string; rite: string; catalyst: s
   'annihilation-crown': { effect: 'crown', rite: '灭世加冕', catalyst: '暗雷王印' },
   'crystal-ball': { effect: 'crystal', rite: '水晶共鸣', catalyst: '澄澈灵液' },
   'harmony-cup': { effect: 'chalice', rite: '圣杯灌注', catalyst: '和谐圣泉' },
-  'sacred-chain': { effect: 'chain', rite: '圣链锻接', catalyst: '秘银链节' },
   'mystic-talisman': { effect: 'talisman', rite: '敕令封印', catalyst: '灵符朱砂' },
   'guardian-star': { effect: 'guardian', rite: '星盾守护', catalyst: '守望星屑' },
   'element-compass': { effect: 'compass', rite: '元素跃迁', catalyst: '四象磁针' },
@@ -295,6 +289,23 @@ const costRules: Record<string, number> = {
 };
 
 const instantUpgradeItems = new Set(['burning-gem', 'annihilation-crown', 'crystal-ball', 'harmony-cup']);
+
+const burningGemLevelPalettes = {
+  neutral: { accent: '#9b9386', soft: '#292622' },
+  green: { accent: '#4ed08b', soft: '#143a2a' },
+  blue: { accent: '#55a8ff', soft: '#152f4d' },
+  purple: { accent: '#b67cff', soft: '#321d4c' },
+  ultimate: { accent: '#ff7a32', soft: '#4a2415' },
+};
+
+function levelPalette(item: ProbabilityItem, level: number) {
+  if (item.id !== 'burning-gem') return { accent: item.accent, soft: item.accentSoft };
+  if (level >= 10) return burningGemLevelPalettes.ultimate;
+  if (level >= 7) return burningGemLevelPalettes.purple;
+  if (level >= 4) return burningGemLevelPalettes.blue;
+  if (level >= 1) return burningGemLevelPalettes.green;
+  return burningGemLevelPalettes.neutral;
+}
 
 export default function Home() {
   const initialLevels = useMemo(() => Object.fromEntries(items.filter((item) => item.mode !== 'draw').map((item) => [item.id, item.minLevel ?? 0])), []);
@@ -445,7 +456,8 @@ export default function Home() {
     setCostLedger({ knownSpend: 0, pricedAttempts: 0 });
   }
 
-  const theme = { '--accent': item.accent, '--accent-soft': item.accentSoft } as CSSProperties;
+  const currentLevelPalette = levelPalette(item, level);
+  const theme = { '--accent': currentLevelPalette.accent, '--accent-soft': currentLevelPalette.soft } as CSSProperties;
   const maxSelectable = item.maxLevel ?? item.minLevel ?? 0;
   const canForge = item.mode === 'draw' || outcomes.length > 0;
   const actionLabel = item.mode === 'draw' ? '唤醒图腾' : item.mode === 'check' ? '进行祈愿' : item.mode === 'adaptive' ? '点亮星辰' : '开始强化';
@@ -459,7 +471,6 @@ export default function Home() {
   const crystalScale = 0.76 + (tierProgress / 100) * 0.44;
   const harmonyScale = 0.78 + (tierProgress / 100) * 0.42;
   const levelLabel = (value: number) => item.mode === 'adaptive' ? `${value}★` : item.mode === 'check' ? `${value}档` : `+${value}`;
-  const nextLevelLabel = levelLabel(Math.min(maxSelectable, level + 1));
   const usesLevelOnlyFeedback = instantUpgradeItems.has(item.id);
   const feedbackClass = !usesLevelOnlyFeedback && lastAttempt ? `echo-${outcomeStyle(lastAttempt.kind)}` : '';
   const feedbackKey = usesLevelOnlyFeedback ? item.id : `${item.id}-${lastAttempt?.id ?? 'idle'}`;
@@ -476,7 +487,7 @@ export default function Home() {
           <div className="item-list">
             {items.map((entry) => (
               <button key={entry.id} type="button" className={`item-card tier-${visualTier(entry, levels[entry.id] ?? entry.minLevel ?? 0)} ${entry.id === item.id ? 'active' : ''}`} onClick={() => chooseItem(entry)}>
-                <span className="item-symbol" style={{ '--card-accent': entry.accent, '--card-soft': entry.accentSoft } as CSSProperties}>{entry.symbol}</span>
+                <span className="item-symbol" style={{ '--card-accent': levelPalette(entry, levels[entry.id] ?? entry.minLevel ?? 0).accent, '--card-soft': levelPalette(entry, levels[entry.id] ?? entry.minLevel ?? 0).soft } as CSSProperties}>{entry.symbol}</span>
                 <span><b>{entry.name}</b><small>{entry.aliases?.length ? entry.aliases.join(' / ') : entry.category}</small><i className="item-meter"><i style={{ width: `${Math.round((((levels[entry.id] ?? entry.minLevel ?? 0) - (entry.minLevel ?? 0)) / Math.max(1, (entry.maxLevel ?? 1) - (entry.minLevel ?? 0))) * 100)}%` }} /></i></span>
                 <em>{entry.mode === 'draw' ? '秘宝' : entry.mode === 'adaptive' ? `${levels[entry.id] ?? 0}★` : entry.mode === 'check' ? `${levels[entry.id] ?? entry.minLevel}档` : `+${levels[entry.id] ?? entry.minLevel ?? 0}`}</em>
               </button>
@@ -487,7 +498,7 @@ export default function Home() {
         <section className="forge-stage">
           <div className={`forge-chamber fx-${effectProfile.effect} tier-${tier} ${feedbackClass}`} key={feedbackKey} style={{ '--tier-progress': `${tierProgress}%`, '--flame-scale': flameScale, '--flame-burst-scale': flameScale * 1.28, '--flame-dip-scale': flameScale * 0.9, '--crown-scale': crownScale, '--crown-entry-scale': crownScale * 0.82, '--crown-burst-scale': crownScale * 1.2, '--crystal-scale': crystalScale, '--harmony-scale': harmonyScale } as CSSProperties}>
             <div className="altar-glow" />
-            {item.mode !== 'draw' && <div className="level-route"><div className="level-focus"><span>当前等级</span><b>{levelLabel(level)}</b><i>→</i><span>目标等级</span><strong>{canForge ? nextLevelLabel : 'MAX'}</strong></div><div className="level-steps" aria-label="强化等级进度">{Array.from({ length: maxSelectable - (item.minLevel ?? 0) + 1 }, (_, index) => (item.minLevel ?? 0) + index).map((step) => <span key={step} className={step === level ? 'current' : step < level ? 'done' : ''} aria-current={step === level ? 'step' : undefined}><i /><b>{step}</b></span>)}</div></div>}
+            {item.mode !== 'draw' && <div className="level-route"><div className="level-focus"><span>当前等级</span><b>{levelLabel(level)}</b></div><div className="level-steps" aria-label="强化等级进度">{Array.from({ length: maxSelectable - (item.minLevel ?? 0) + 1 }, (_, index) => (item.minLevel ?? 0) + index).map((step) => <span key={step} className={step === level ? 'current' : step < level ? 'done' : ''} aria-current={step === level ? 'step' : undefined} style={item.id === 'burning-gem' ? { '--step-color': levelPalette(item, step).accent } as CSSProperties : undefined}><i /><b>{step}</b></span>)}</div></div>}
             <div className={`effect-stage tier-${tier}`}>
               <div className="effect-visual">
                 {item.id === 'burning-gem' ? (
@@ -582,7 +593,7 @@ export default function Home() {
           <div className="budget-total"><span>已录入规则累计花费</span><strong>¥{costLedger.knownSpend.toFixed(2)}</strong><p>宝石 ¥3 · 王冠 ¥5 · 水晶球 ¥3 · 圣杯 ¥2 / 次</p></div>
           <div className="account-progress"><div><span>账号完成度</span><b>{accountProgress}%</b></div><i><i style={{ width: `${accountProgress}%` }} /></i><small>{completedItems} / {items.length} 项达到目标</small></div>
           <div className="stat-grid"><div><span>强化次数</span><b>{totals.total}</b></div><div><span>成功</span><b>{totals.success}</b></div><div><span>失败</span><b>{totals.risk}</b></div></div>
-          <div className="rule-roadmap"><h3>成本规则进度</h3><div className="done"><i>✓</i><span><b>升级概率</b><small>已录入官方公示</small></span></div><div className="done"><i>✓</i><span><b>四项核心道具已计价</b><small>宝石 3 · 王冠 5 · 水晶球 3 · 圣杯 2 元 / 次</small></span></div><div><i>3</i><span><b>其余 14 项成本</b><small>已计价 {costLedger.pricedAttempts} 次 · 等待共同完善</small></span></div></div>
+          <div className="rule-roadmap"><h3>成本规则进度</h3><div className="done"><i>✓</i><span><b>升级概率</b><small>已录入官方公示</small></span></div><div className="done"><i>✓</i><span><b>四项核心道具已计价</b><small>宝石 3 · 王冠 5 · 水晶球 3 · 圣杯 2 元 / 次</small></span></div><div><i>3</i><span><b>其余 13 项成本</b><small>已计价 {costLedger.pricedAttempts} 次 · 等待共同完善</small></span></div></div>
           <div className="log-heading"><span>最近强化</span><i>{attempts.length} 次</i></div>
           <div className="history-list">
             {!attempts.length ? <div className="empty-history"><span>✦</span><b>尚未开始打造</b><p>选择左侧项目并进行第一次强化</p></div> : attempts.slice(0, 5).map((attempt, index) => (
