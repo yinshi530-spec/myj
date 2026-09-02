@@ -287,7 +287,10 @@ const effectProfiles: Record<string, { effect: string; rite: string; catalyst: s
 const costRules: Record<string, number> = {
   'burning-gem': 3,
   'annihilation-crown': 5,
+  'crystal-ball': 3,
 };
+
+const instantUpgradeItems = new Set(['burning-gem', 'annihilation-crown', 'crystal-ball']);
 
 export default function Home() {
   const initialLevels = useMemo(() => Object.fromEntries(items.filter((item) => item.mode !== 'draw').map((item) => [item.id, item.minLevel ?? 0])), []);
@@ -420,7 +423,7 @@ export default function Home() {
       setIsRolling(false);
     };
 
-    if (item.id === 'burning-gem' || item.id === 'annihilation-crown') {
+    if (instantUpgradeItems.has(item.id)) {
       applyResults();
       return;
     }
@@ -449,9 +452,10 @@ export default function Home() {
   const unitCost = costRules[item.id] ?? null;
   const flameScale = 0.62 + (tierProgress / 100) * 0.83;
   const crownScale = 0.78 + (tierProgress / 100) * 0.38;
+  const crystalScale = 0.76 + (tierProgress / 100) * 0.44;
   const levelLabel = (value: number) => item.mode === 'adaptive' ? `${value}★` : item.mode === 'check' ? `${value}档` : `+${value}`;
   const nextLevelLabel = levelLabel(Math.min(maxSelectable, level + 1));
-  const usesLevelOnlyFeedback = item.id === 'burning-gem' || item.id === 'annihilation-crown';
+  const usesLevelOnlyFeedback = instantUpgradeItems.has(item.id);
   const feedbackClass = !usesLevelOnlyFeedback && lastAttempt ? `echo-${outcomeStyle(lastAttempt.kind)}` : '';
   const feedbackKey = usesLevelOnlyFeedback ? item.id : `${item.id}-${lastAttempt?.id ?? 'idle'}`;
 
@@ -491,7 +495,7 @@ export default function Home() {
             <div className="hero-status"><div className={`tier-badge tier-${tier}`}><small>当前境界</small><b>{item.mode === 'draw' ? '秘宝' : tierNames[tier]}</b></div><button type="button" className="rules-button" onClick={() => setRulesOpen(true)}>规则详情</button></div>
           </header>
 
-          <div className={`forge-chamber fx-${effectProfile.effect} tier-${tier} ${feedbackClass}`} key={feedbackKey} style={{ '--tier-progress': `${tierProgress}%`, '--flame-scale': flameScale, '--flame-burst-scale': flameScale * 1.28, '--flame-dip-scale': flameScale * 0.9, '--crown-scale': crownScale, '--crown-entry-scale': crownScale * 0.82, '--crown-burst-scale': crownScale * 1.2 } as CSSProperties}>
+          <div className={`forge-chamber fx-${effectProfile.effect} tier-${tier} ${feedbackClass}`} key={feedbackKey} style={{ '--tier-progress': `${tierProgress}%`, '--flame-scale': flameScale, '--flame-burst-scale': flameScale * 1.28, '--flame-dip-scale': flameScale * 0.9, '--crown-scale': crownScale, '--crown-entry-scale': crownScale * 0.82, '--crown-burst-scale': crownScale * 1.2, '--crystal-scale': crystalScale } as CSSProperties}>
             <div className="altar-glow" />
             {item.mode !== 'draw' && <div className="level-route"><div className="level-focus"><span>当前等级</span><b>{levelLabel(level)}</b><i>→</i><span>目标等级</span><strong>{canForge ? nextLevelLabel : 'MAX'}</strong></div><div className="level-steps" aria-label="强化等级进度">{Array.from({ length: maxSelectable - (item.minLevel ?? 0) + 1 }, (_, index) => (item.minLevel ?? 0) + index).map((step) => <span key={step} className={step === level ? 'current' : step < level ? 'done' : ''} aria-current={step === level ? 'step' : undefined}><i /><b>{step}</b></span>)}</div></div>}
             <div className={`effect-stage tier-${tier}`}>
@@ -524,6 +528,19 @@ export default function Home() {
                     </div>
                     <div className="effect-particles crown-ash">{Array.from({ length: 14 }, (_, index) => <i key={index} />)}</div>
                   </>
+                ) : item.id === 'crystal-ball' ? (
+                  <>
+                    <div className="crystal-ball-art" role="img" aria-label="盛放星雾能量的水晶球">
+                      <div className="orb-rings"><i /><i /><i /></div>
+                      <div className="crystal-sphere">
+                        <span className="crystal-mist" />
+                        <div className="orb-stars">{Array.from({ length: 7 }, (_, index) => <i key={index} />)}</div>
+                        <b className="orb-core" />
+                      </div>
+                      <div className="crystal-pedestal"><i /></div>
+                    </div>
+                    <div className="effect-particles crystal-motes">{Array.from({ length: 14 }, (_, index) => <i key={index} />)}</div>
+                  </>
                 ) : (
                   <>
                     <div className="effect-field" />
@@ -542,7 +559,7 @@ export default function Home() {
           </div>
 
             {lastAttempt && (
-              <div className={`result-banner ${outcomeStyle(lastAttempt.kind)}`} role="status">
+              <div className={`result-banner result-tooltip ${outcomeStyle(lastAttempt.kind)} ${usesLevelOnlyFeedback ? 'instant-feedback' : ''}`} role="status">
                 <div className="result-sigil">{lastAttempt.kind === 'success' || lastAttempt.kind === 'jump' ? '✦' : lastAttempt.kind === 'draw' ? '◇' : '⌁'}</div>
                 <div><span>锻造回响</span><b>{lastAttempt.resultLabel}</b><p>{lastAttempt.itemName} · {lastAttempt.fromLabel} → {lastAttempt.toLabel}</p></div><strong>{lastAttempt.toLabel}</strong><button type="button" aria-label="关闭结果" onClick={() => setLastAttempt(null)}>×</button>
               </div>
@@ -552,10 +569,10 @@ export default function Home() {
 
         <aside className="session-panel">
           <div className="session-heading"><div><span>极品号账本</span><b>BUILD COST LEDGER</b></div><button type="button" onClick={resetSession}>重置</button></div>
-          <div className="budget-total"><span>已录入规则累计花费</span><strong>¥{costLedger.knownSpend.toFixed(2)}</strong><p>燃烧宝石 ¥3 / 次 · 灭世之冠 ¥5 / 次</p></div>
+          <div className="budget-total"><span>已录入规则累计花费</span><strong>¥{costLedger.knownSpend.toFixed(2)}</strong><p>燃烧宝石 ¥3 · 灭世之冠 ¥5 · 水晶球 ¥3 / 次</p></div>
           <div className="account-progress"><div><span>账号完成度</span><b>{accountProgress}%</b></div><i><i style={{ width: `${accountProgress}%` }} /></i><small>{completedItems} / {items.length} 项达到目标</small></div>
           <div className="stat-grid"><div><span>强化次数</span><b>{totals.total}</b></div><div><span>成功</span><b>{totals.success}</b></div><div><span>失败</span><b>{totals.risk}</b></div></div>
-          <div className="rule-roadmap"><h3>成本规则进度</h3><div className="done"><i>✓</i><span><b>升级概率</b><small>已录入官方公示</small></span></div><div className="done"><i>✓</i><span><b>燃烧宝石 · 灭世之冠</b><small>¥3 / 次 · ¥5 / 次 · 已计价 {costLedger.pricedAttempts} 次</small></span></div><div><i>3</i><span><b>其余 16 项成本</b><small>等待共同完善</small></span></div></div>
+          <div className="rule-roadmap"><h3>成本规则进度</h3><div className="done"><i>✓</i><span><b>升级概率</b><small>已录入官方公示</small></span></div><div className="done"><i>✓</i><span><b>三项核心道具已计价</b><small>宝石 ¥3 · 王冠 ¥5 · 水晶球 ¥3 · 共 {costLedger.pricedAttempts} 次</small></span></div><div><i>3</i><span><b>其余 15 项成本</b><small>等待共同完善</small></span></div></div>
           <div className="log-heading"><span>最近强化</span><i>{attempts.length} 次</i></div>
           <div className="history-list">
             {!attempts.length ? <div className="empty-history"><span>✦</span><b>尚未开始打造</b><p>选择左侧项目并进行第一次强化</p></div> : attempts.slice(0, 5).map((attempt, index) => (
