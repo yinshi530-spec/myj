@@ -68,7 +68,7 @@ type ResultFeedback = {
 
 type StoredSession = {
   version: 1;
-  costModel?: 'quantity-adjusted-v1';
+  costModel?: 'quantity-adjusted-v1' | 'quantity-adjusted-v2';
   selectedId: string;
   levels: Record<string, number>;
   targetLevels: Record<string, number>;
@@ -98,11 +98,12 @@ type AutoTargetRun = {
 };
 
 const sessionStorageKey = 'myj-forge-session-v1';
-const quantityAdjustedCostModel = 'quantity-adjusted-v1' as const;
+const quantityAdjustedCostModel = 'quantity-adjusted-v2' as const;
 const autoTargetLimits: Record<string, number> = { 'burning-gem': 8, 'moon-myth': 9 };
 const itemQuantities: Record<string, number> = {
   'crystal-ball': 5,
   'moon-myth': 5,
+  'holy-gift': 5,
   'goddess-fate': 3,
   earring: 2,
 };
@@ -415,7 +416,7 @@ const items: ProbabilityItem[] = [
   },
   {
     id: 'holy-gift', name: '圣之赐', aliases: ['神圣之力'], category: '装备升阶', mode: 'upgrade', symbol: '✚', accent: '#f4d66f', accentSoft: '#40361b',
-    description: '每次升级 ¥5，+2、+4、+6、+8 为保级点。', sourceNote: '失败时回落到最近的保级点，不会跌破已达到的 +2、+4、+6、+8。', minLevel: 0, maxLevel: 10,
+    description: '共 5 份，每次升级合计 ¥25（¥5 × 5），+2、+4、+6、+8 为保级点。', sourceNote: '失败时回落到最近的保级点，不会跌破已达到的 +2、+4、+6、+8。', minLevel: 0, maxLevel: 10,
     rows: explicitRows([[0,100,1,null],[1,100,2,null],[2,90,3,2],[3,80,4,2],[4,50,5,4],[5,50,6,4],[6,30,7,6],[7,15,8,6],[8,10,9,8],[9,2,10,8]]),
   },
   {
@@ -559,12 +560,16 @@ export default function Home() {
       if (!rawSession) return;
       const stored = JSON.parse(rawSession) as Partial<StoredSession>;
       if (stored.version !== 1) return;
-      const usesQuantityAdjustedCosts = stored.costModel === quantityAdjustedCostModel;
+      const quantityMigrationMultiplier = (itemId: string) => {
+        if (stored.costModel === quantityAdjustedCostModel) return 1;
+        if (stored.costModel === 'quantity-adjusted-v1') return itemId === 'holy-gift' ? 5 : 1;
+        return itemQuantities[itemId] ?? 1;
+      };
       const restoredAttempts = Array.isArray(stored.attempts)
         ? stored.attempts.filter(isStoredAttempt).slice(0, 120).map((attempt) => {
-          const quantity = itemQuantities[attempt.itemId] ?? 1;
-          if (usesQuantityAdjustedCosts || quantity === 1 || attempt.cost === null) return attempt;
-          return { ...attempt, cost: attempt.cost * quantity };
+          const multiplier = quantityMigrationMultiplier(attempt.itemId);
+          if (multiplier === 1 || attempt.cost === null) return attempt;
+          return { ...attempt, cost: attempt.cost * multiplier };
         })
         : [];
 
@@ -614,14 +619,12 @@ export default function Home() {
           });
         }
         let knownSpend = Math.max(0, stored.costLedger.knownSpend);
-        if (!usesQuantityAdjustedCosts) {
-          Object.entries(itemSpend).forEach(([itemId, spend]) => {
-            const quantity = itemQuantities[itemId] ?? 1;
-            if (quantity === 1) return;
-            itemSpend[itemId] = spend * quantity;
-            knownSpend += spend * (quantity - 1);
-          });
-        }
+        Object.entries(itemSpend).forEach(([itemId, spend]) => {
+          const multiplier = quantityMigrationMultiplier(itemId);
+          if (multiplier === 1) return;
+          itemSpend[itemId] = spend * multiplier;
+          knownSpend += spend * (multiplier - 1);
+        });
         setCostLedger({
           knownSpend,
           pricedAttempts: Math.max(0, Math.floor(stored.costLedger.pricedAttempts)),
@@ -1283,7 +1286,7 @@ export default function Home() {
 
         <aside className="session-panel">
           <div className="session-heading"><div><span>极品号账本</span><b>BUILD COST LEDGER</b></div><button type="button" onClick={restartSession} disabled={!hasHydrated}>重新计算</button></div>
-          <div className="budget-total"><button type="button" className="budget-detail-trigger" onClick={() => setCostDetailsOpen(true)} disabled={!hasHydrated}><span>已录入规则累计花费 <i>查看逐项明细</i></span><strong>¥{costLedger.knownSpend.toFixed(2)}</strong></button><p>宝石 3 · 王冠 5 · 圣杯 2 · 护符 2 · 罗盘 5 · 圣赐 5 · 元神 5 · Mophone 8 · 万象图 8 · 守护星 2（保护 +8）；升级合计：水晶球 15（3 × 5）· 星月 25（5 × 5）· 命运女神 24（8 × 3）· 耳环 16（8 × 2）</p></div>
+          <div className="budget-total"><button type="button" className="budget-detail-trigger" onClick={() => setCostDetailsOpen(true)} disabled={!hasHydrated}><span>已录入规则累计花费 <i>查看逐项明细</i></span><strong>¥{costLedger.knownSpend.toFixed(2)}</strong></button><p>宝石 3 · 王冠 5 · 圣杯 2 · 护符 2 · 罗盘 5 · 元神 5 · Mophone 8 · 万象图 8 · 守护星 2（保护 +8）；升级合计：水晶球 15（3 × 5）· 星月 25（5 × 5）· 圣之赐 25（5 × 5）· 命运女神 24（8 × 3）· 耳环 16（8 × 2）</p></div>
           <div className="account-progress"><div><span>账号完成度</span><b>{accountProgress}%</b></div><i><i style={{ width: `${accountProgress}%` }} /></i><small>{completedItems} / {items.length} 项达到目标</small></div>
           <div className="stat-grid"><div><span>强化次数</span><b>{totals.total}</b></div><div><span>成功</span><b>{totals.success}</b></div><div><span>失败</span><b>{totals.risk}</b></div></div>
           <div className="rule-roadmap"><h3>成本规则进度</h3><div className="done"><i>✓</i><span><b>升级概率</b><small>已录入官方公示</small></span></div><div className="done"><i>✓</i><span><b>{Object.keys(costRules).length} 项核心道具已计价</b><small>守护星 ¥2 / 次 · 可选保护 +¥8</small></span></div><div><i>3</i><span><b>其余 {items.length - Object.keys(costRules).length} 项成本</b><small>已计价 {costLedger.pricedAttempts} 次 · 等待共同完善</small></span></div></div>
