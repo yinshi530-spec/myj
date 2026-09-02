@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useMemo, useRef, useState, type CSSProperties } from 'react';
 
 type OutcomeKind = 'success' | 'jump' | 'stay' | 'down' | 'fail' | 'draw';
 type Mode = 'upgrade' | 'check' | 'draw' | 'adaptive';
@@ -61,7 +61,10 @@ type Attempt = {
   cost: number | null;
 };
 
-const categories: Array<'全部' | Category> = ['全部', '宝石与圣器', '特殊强化', '装备升阶', '星级系统'];
+type ResultFeedback = {
+  id: number;
+  attempt: Attempt;
+};
 
 function standardRows(rates: Array<[number, number, number]>): UpgradeRow[] {
   return rates.map(([success, stay, down], current) => ({
@@ -298,22 +301,16 @@ export default function Home() {
   const [levels, setLevels] = useState<Record<string, number>>(initialLevels);
   const [attemptCount, setAttemptCount] = useState(1);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
-  const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<'全部' | Category>('全部');
   const [isRolling, setIsRolling] = useState(false);
   const [lastAttempt, setLastAttempt] = useState<Attempt | null>(null);
+  const [resultFeedbacks, setResultFeedbacks] = useState<ResultFeedback[]>([]);
+  const feedbackSequence = useRef(0);
   const [costLedger, setCostLedger] = useState({ knownSpend: 0, pricedAttempts: 0 });
 
   const item = items.find((entry) => entry.id === selectedId) ?? items[0];
   const level = levels[item.id] ?? item.minLevel ?? 0;
   const currentRow = item.rows?.find((row) => row.current === level);
   const adaptiveRow = item.adaptiveRows?.find((row) => row.target === Math.min(10, level + 1));
-
-  const visibleItems = useMemo(() => items.filter((entry) => {
-    const categoryMatch = category === '全部' || entry.category === category;
-    const searchable = [entry.name, ...(entry.aliases ?? [])].join('');
-    return categoryMatch && searchable.toLowerCase().includes(query.trim().toLowerCase());
-  }), [category, query]);
 
   const totals = useMemo(() => attempts.reduce((acc, attempt) => {
     acc.total += 1;
@@ -348,6 +345,7 @@ export default function Home() {
   function chooseItem(next: ProbabilityItem) {
     setSelectedId(next.id);
     setLastAttempt(null);
+    setResultFeedbacks([]);
   }
 
   function createAttempt(activeItem: ProbabilityItem, currentLevel: number, count: number, sequence: number) {
@@ -417,7 +415,13 @@ export default function Home() {
         pricedAttempts: current.pricedAttempts + generated.filter((attempt) => attempt.cost !== null).length,
       }));
       setAttempts((current) => [...latestAttempts, ...current].slice(0, 120));
-      setLastAttempt(latestAttempts[0]);
+      const latestAttempt = latestAttempts[0];
+      const feedback = { id: feedbackSequence.current += 1, attempt: latestAttempt };
+      setLastAttempt(latestAttempt);
+      setResultFeedbacks((current) => [...current, feedback].slice(-4));
+      window.setTimeout(() => {
+        setResultFeedbacks((current) => current.filter((entry) => entry.id !== feedback.id));
+      }, 1600);
       setIsRolling(false);
     };
 
@@ -436,6 +440,7 @@ export default function Home() {
     setAttemptCount(1);
     setAttempts([]);
     setLastAttempt(null);
+    setResultFeedbacks([]);
     setCostLedger({ knownSpend: 0, pricedAttempts: 0 });
   }
 
@@ -459,31 +464,21 @@ export default function Home() {
 
   return (
     <main className={`game-forge ${isRolling ? 'is-forging' : ''}`} style={theme}>
-      <header className="game-hud compact-hud">
-        <div className="player-block">
-          <div className="player-avatar"><span>极</span></div>
-          <div><p>猫游记养成规划</p><h1>极品号打造计划</h1></div>
-        </div>
-        <div className="plan-overview"><span><i /> 规则底稿 V0.2</span><b>{completedItems}/{items.length} 项毕业</b></div>
-        <div className="hud-actions"><span>已知累计花费 <b>¥{costLedger.knownSpend.toFixed(2)}</b></span><a href="http://www.pet.imop.com/html/6/13/54102.htm" target="_blank" rel="noreferrer">官方公示 ↗</a></div>
+      <header className="game-hud compact-hud cost-hud">
+        <div className="hud-cost-only"><span>已知累计花费</span><b>¥{costLedger.knownSpend.toFixed(2)}</b></div>
       </header>
 
       <section className="forge-layout">
         <aside className="catalog-panel">
           <div className="catalog-heading"><div><span>培养清单</span><b>{items.length} 项</b></div><small>逐项打造，最终汇总账号成本</small></div>
-          <label className="search-box"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索道具或别名" /></label>
-          <div className="category-list" aria-label="道具分类">
-            {categories.map((entry) => <button key={entry} type="button" className={category === entry ? 'active' : ''} onClick={() => setCategory(entry)}>{entry}</button>)}
-          </div>
           <div className="item-list">
-            {visibleItems.map((entry) => (
+            {items.map((entry) => (
               <button key={entry.id} type="button" className={`item-card tier-${visualTier(entry, levels[entry.id] ?? entry.minLevel ?? 0)} ${entry.id === item.id ? 'active' : ''}`} onClick={() => chooseItem(entry)}>
                 <span className="item-symbol" style={{ '--card-accent': entry.accent, '--card-soft': entry.accentSoft } as CSSProperties}>{entry.symbol}</span>
                 <span><b>{entry.name}</b><small>{entry.aliases?.length ? entry.aliases.join(' / ') : entry.category}</small><i className="item-meter"><i style={{ width: `${Math.round((((levels[entry.id] ?? entry.minLevel ?? 0) - (entry.minLevel ?? 0)) / Math.max(1, (entry.maxLevel ?? 1) - (entry.minLevel ?? 0))) * 100)}%` }} /></i></span>
                 <em>{entry.mode === 'draw' ? '秘宝' : entry.mode === 'adaptive' ? `${levels[entry.id] ?? 0}★` : entry.mode === 'check' ? `${levels[entry.id] ?? entry.minLevel}档` : `+${levels[entry.id] ?? entry.minLevel ?? 0}`}</em>
               </button>
             ))}
-            {!visibleItems.length && <p className="no-results">背包里没有这个道具</p>}
           </div>
         </aside>
 
@@ -551,10 +546,15 @@ export default function Home() {
             <div className="altar-actions"><button type="button" className="secondary-action" onClick={() => simulate(10)} disabled={isRolling || !canForge}>{unitCost !== null ? `十连 · 最多 ¥${(unitCost * 10).toFixed(0)}` : '十连强化'}</button><button type="button" className="primary-action" onClick={() => simulate(1)} disabled={isRolling || !canForge}><span>{isRolling ? '强化中…' : canForge ? unitCost !== null ? `${actionLabel} · ¥${unitCost.toFixed(0)}` : actionLabel : '已经毕业'}</span></button></div>
           </div>
 
-            {lastAttempt && (
-              <div className={`result-banner result-tooltip ${outcomeStyle(lastAttempt.kind)} ${usesLevelOnlyFeedback ? 'instant-feedback' : ''}`} role="status">
-                <div className="result-sigil">{lastAttempt.kind === 'success' || lastAttempt.kind === 'jump' ? '✦' : lastAttempt.kind === 'draw' ? '◇' : '⌁'}</div>
-                <div><span>锻造回响</span><b>{lastAttempt.resultLabel}</b><p>{lastAttempt.itemName} · {lastAttempt.fromLabel} → {lastAttempt.toLabel}</p></div><strong>{lastAttempt.toLabel}</strong><button type="button" aria-label="关闭结果" onClick={() => setLastAttempt(null)}>×</button>
+            {!!resultFeedbacks.length && (
+              <div className="result-tooltip-stack" role="status" aria-live="polite">
+                {resultFeedbacks.map(({ id, attempt }) => (
+                  <div className={`result-popover ${outcomeStyle(attempt.kind)}`} key={id}>
+                    <span>{attempt.kind === 'success' || attempt.kind === 'jump' ? '✦' : attempt.kind === 'draw' ? '◇' : '⌁'}</span>
+                    <div><b>{attempt.resultLabel}</b><small>{attempt.fromLabel} → {attempt.toLabel}</small></div>
+                    <strong>{attempt.toLabel}</strong>
+                  </div>
+                ))}
               </div>
             )}
 
