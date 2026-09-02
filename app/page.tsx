@@ -407,23 +407,27 @@ export default function Home() {
       if (item.mode === 'adaptive') currentCount += 1;
     }
     if (!generated.length) return;
-    setIsRolling(true);
-    const feedbackDelay = item.id === 'burning-gem'
-      ? (times === 1 ? 360 : 620)
-      : item.id === 'annihilation-crown'
-        ? (times === 1 ? 520 : 760)
-        : (times === 1 ? 920 : 1280);
-    window.setTimeout(() => {
+    const applyResults = () => {
+      const latestAttempts = [...generated].reverse();
       if (item.mode === 'upgrade' || item.mode === 'adaptive') setLevels((current) => ({ ...current, [item.id]: currentLevel }));
       if (item.mode === 'adaptive') setAttemptCount(currentCount);
       setCostLedger((current) => ({
         knownSpend: current.knownSpend + generated.reduce((sum, attempt) => sum + (attempt.cost ?? 0), 0),
         pricedAttempts: current.pricedAttempts + generated.filter((attempt) => attempt.cost !== null).length,
       }));
-      setAttempts((current) => [...generated.reverse(), ...current].slice(0, 120));
-      setLastAttempt(generated[0]);
+      setAttempts((current) => [...latestAttempts, ...current].slice(0, 120));
+      setLastAttempt(latestAttempts[0]);
       setIsRolling(false);
-    }, feedbackDelay);
+    };
+
+    if (item.id === 'burning-gem' || item.id === 'annihilation-crown') {
+      applyResults();
+      return;
+    }
+
+    setIsRolling(true);
+    const feedbackDelay = times === 1 ? 920 : 1280;
+    window.setTimeout(applyResults, feedbackDelay);
   }
 
   function resetSession() {
@@ -447,6 +451,9 @@ export default function Home() {
   const crownScale = 0.78 + (tierProgress / 100) * 0.38;
   const levelLabel = (value: number) => item.mode === 'adaptive' ? `${value}★` : item.mode === 'check' ? `${value}档` : `+${value}`;
   const nextLevelLabel = levelLabel(Math.min(maxSelectable, level + 1));
+  const usesLevelOnlyFeedback = item.id === 'burning-gem' || item.id === 'annihilation-crown';
+  const feedbackClass = !usesLevelOnlyFeedback && lastAttempt ? `echo-${outcomeStyle(lastAttempt.kind)}` : '';
+  const feedbackKey = usesLevelOnlyFeedback ? item.id : `${item.id}-${lastAttempt?.id ?? 'idle'}`;
 
   return (
     <main className={`game-forge ${isRolling ? 'is-forging' : ''}`} style={theme}>
@@ -484,7 +491,7 @@ export default function Home() {
             <div className="hero-status"><div className={`tier-badge tier-${tier}`}><small>当前境界</small><b>{item.mode === 'draw' ? '秘宝' : tierNames[tier]}</b></div><button type="button" className="rules-button" onClick={() => setRulesOpen(true)}>规则详情</button></div>
           </header>
 
-          <div className={`forge-chamber fx-${effectProfile.effect} tier-${tier} ${lastAttempt ? `echo-${outcomeStyle(lastAttempt.kind)}` : ''}`} key={`${item.id}-${lastAttempt?.id ?? 'idle'}`} style={{ '--tier-progress': `${tierProgress}%`, '--flame-scale': flameScale, '--flame-burst-scale': flameScale * 1.28, '--flame-dip-scale': flameScale * 0.9, '--crown-scale': crownScale, '--crown-entry-scale': crownScale * 0.82, '--crown-burst-scale': crownScale * 1.2 } as CSSProperties}>
+          <div className={`forge-chamber fx-${effectProfile.effect} tier-${tier} ${feedbackClass}`} key={feedbackKey} style={{ '--tier-progress': `${tierProgress}%`, '--flame-scale': flameScale, '--flame-burst-scale': flameScale * 1.28, '--flame-dip-scale': flameScale * 0.9, '--crown-scale': crownScale, '--crown-entry-scale': crownScale * 0.82, '--crown-burst-scale': crownScale * 1.2 } as CSSProperties}>
             <div className="altar-glow" />
             {item.mode !== 'draw' && <div className="level-route"><div className="level-focus"><span>当前等级</span><b>{levelLabel(level)}</b><i>→</i><span>目标等级</span><strong>{canForge ? nextLevelLabel : 'MAX'}</strong></div><div className="level-steps" aria-label="强化等级进度">{Array.from({ length: maxSelectable - (item.minLevel ?? 0) + 1 }, (_, index) => (item.minLevel ?? 0) + index).map((step) => <span key={step} className={step === level ? 'current' : step < level ? 'done' : ''} aria-current={step === level ? 'step' : undefined}><i /><b>{step}</b></span>)}</div></div>}
             <div className={`effect-stage tier-${tier}`}>
