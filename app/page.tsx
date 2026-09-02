@@ -302,7 +302,6 @@ export default function Home() {
   const [category, setCategory] = useState<'全部' | Category>('全部');
   const [isRolling, setIsRolling] = useState(false);
   const [lastAttempt, setLastAttempt] = useState<Attempt | null>(null);
-  const [rulesOpen, setRulesOpen] = useState(false);
   const [costLedger, setCostLedger] = useState({ knownSpend: 0, pricedAttempts: 0 });
 
   const item = items.find((entry) => entry.id === selectedId) ?? items[0];
@@ -349,7 +348,6 @@ export default function Home() {
   function chooseItem(next: ProbabilityItem) {
     setSelectedId(next.id);
     setLastAttempt(null);
-    setRulesOpen(false);
   }
 
   function createAttempt(activeItem: ProbabilityItem, currentLevel: number, count: number, sequence: number) {
@@ -490,11 +488,6 @@ export default function Home() {
         </aside>
 
         <section className="forge-stage">
-          <header className="item-hero compact-hero">
-            <div><div className="eyebrow"><span>{item.category}</span><i>{item.mode === 'draw' ? '远古秘宝' : item.mode === 'adaptive' ? '星辰遗物' : item.mode === 'check' ? '祝福仪式' : '可成长装备'}</i></div><h2>{item.name}</h2><p>{item.aliases?.length ? `古称：${item.aliases.join('、')} · ` : ''}{item.description}</p></div>
-            <div className="hero-status"><div className={`tier-badge tier-${tier}`}><small>当前境界</small><b>{item.mode === 'draw' ? '秘宝' : tierNames[tier]}</b></div><button type="button" className="rules-button" onClick={() => setRulesOpen(true)}>规则详情</button></div>
-          </header>
-
           <div className={`forge-chamber fx-${effectProfile.effect} tier-${tier} ${feedbackClass}`} key={feedbackKey} style={{ '--tier-progress': `${tierProgress}%`, '--flame-scale': flameScale, '--flame-burst-scale': flameScale * 1.28, '--flame-dip-scale': flameScale * 0.9, '--crown-scale': crownScale, '--crown-entry-scale': crownScale * 0.82, '--crown-burst-scale': crownScale * 1.2, '--crystal-scale': crystalScale } as CSSProperties}>
             <div className="altar-glow" />
             {item.mode !== 'draw' && <div className="level-route"><div className="level-focus"><span>当前等级</span><b>{levelLabel(level)}</b><i>→</i><span>目标等级</span><strong>{canForge ? nextLevelLabel : 'MAX'}</strong></div><div className="level-steps" aria-label="强化等级进度">{Array.from({ length: maxSelectable - (item.minLevel ?? 0) + 1 }, (_, index) => (item.minLevel ?? 0) + index).map((step) => <span key={step} className={step === level ? 'current' : step < level ? 'done' : ''} aria-current={step === level ? 'step' : undefined}><i /><b>{step}</b></span>)}</div></div>}
@@ -583,7 +576,6 @@ export default function Home() {
         </aside>
       </section>
 
-      {rulesOpen && <div className="rules-modal" role="dialog" aria-modal="true" aria-label={`${item.name}规则详情`} onMouseDown={(event) => { if (event.target === event.currentTarget) setRulesOpen(false); }}><section><header><div><small>官方概率底稿</small><h2>{item.name}</h2></div><button type="button" onClick={() => setRulesOpen(false)} aria-label="关闭规则">×</button></header><p>{item.sourceNote}</p><div className="table-card">{item.mode === 'draw' ? <div className="rules-table draw-table"><div className="rules-head"><span>结果</span><span>概率</span></div>{item.drawOptions?.map((option) => <div className="rules-line" key={option.label}><b>{option.label}</b><span>{option.probability}%</span></div>)}</div> : item.mode === 'adaptive' ? <div className="rules-table adaptive-table"><div className="rules-head"><span>目标</span><span>≤40</span><span>41–80</span><span>81–150</span><span>&gt;150</span><span>失败后</span></div>{item.adaptiveRows?.map((row) => <div className={`rules-line ${row.target === level + 1 ? 'current' : ''}`} key={row.target}><b>{row.target}★</b>{row.rates.map((rate, index) => <span key={index}>{rate}%</span>)}<span>{row.failureTo}★{row.failureNote ? ` · ${row.failureNote}` : ''}</span></div>)}</div> : <div className="rules-table level-table"><div className="rules-head"><span>当前</span><span>目标</span><span>结果分布</span></div>{item.rows?.map((row) => <div className={`rules-line ${row.current === level ? 'current' : ''}`} key={row.current}><b>+{row.current}</b><span>{row.target === null ? '—' : `+${row.target}`}</span><span>{row.outcomes.map((outcome) => `${outcome.label} ${outcome.probability}%`).join(' · ')}</span></div>)}</div>}</div></section></div>}
     </main>
   );
 }
