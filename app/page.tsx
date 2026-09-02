@@ -4,7 +4,7 @@ import { useMemo, useState, type CSSProperties } from 'react';
 
 type OutcomeKind = 'success' | 'jump' | 'stay' | 'down' | 'fail' | 'draw';
 type Mode = 'upgrade' | 'check' | 'draw' | 'adaptive';
-type Category = '宝石与圣器' | '特殊强化' | '装备升阶' | '星级系统' | '概率重绘';
+type Category = '宝石与圣器' | '特殊强化' | '装备升阶' | '星级系统';
 
 type Outcome = {
   key: string;
@@ -60,7 +60,7 @@ type Attempt = {
   kind: OutcomeKind;
 };
 
-const categories: Array<'全部' | Category> = ['全部', '宝石与圣器', '特殊强化', '装备升阶', '星级系统', '概率重绘'];
+const categories: Array<'全部' | Category> = ['全部', '宝石与圣器', '特殊强化', '装备升阶', '星级系统'];
 
 function standardRows(rates: Array<[number, number, number]>): UpgradeRow[] {
   return rates.map(([success, stay, down], current) => ({
@@ -227,11 +227,6 @@ const items: ProbabilityItem[] = [
     rows: explicitRows([[0,100,1,null],[1,100,2,null],[2,100,3,null],[3,100,4,null],[4,25,5,4],[5,25,6,4],[6,70,7,6],[7,50,8,6],[8,20,9,8],[9,5,10,8],[10,100,11,10],[11,50,12,10],[12,30,13,10],[13,20,14,13],[14,5,15,13]]),
   },
   {
-    id: 'weapon-magic-stone', name: '武器魔石', category: '概率重绘', mode: 'draw', symbol: '⬢', accent: '#ef6e9a', accentSoft: '#421d31',
-    description: '随机出现 1、2 或 3 个魔石孔。', sourceNote: '官方公布魔石孔数的出现概率。',
-    drawOptions: [{ label: '1 个魔石孔', probability: 80 }, { label: '2 个魔石孔', probability: 15 }, { label: '3 个魔石孔', probability: 5 }],
-  },
-  {
     id: 'wanxiang', name: '万象图', category: '星级系统', mode: 'adaptive', symbol: '◎', accent: '#f8c55c', accentSoft: '#453417',
     description: '成功率同时取决于目标星级与累计次数区间。', sourceNote: '次数区间：≤40、41–80、81–150、>150。', minLevel: 0, maxLevel: 10,
     adaptiveRows: [
@@ -241,24 +236,6 @@ const items: ProbabilityItem[] = [
       { target: 7, rates: [1, 50, 70, 100], failureTo: 6 }, { target: 8, rates: [1, 15, 40, 60], failureTo: 6 },
       { target: 9, rates: [1, 3, 15, 40], failureTo: 8 }, { target: 10, rates: [1, 1, 5, 15], failureTo: 8 },
     ],
-  },
-  {
-    id: 'cloak-rebirth', name: '披风重生', category: '星级系统', mode: 'check', symbol: '⌁', accent: '#80d77f', accentSoft: '#1d3a28',
-    description: '按选定星数读取对应几率。', sourceNote: '公示只给出星数与几率，未列成功或失败后的等级。', minLevel: 1, maxLevel: 15,
-    rows: checkRows(1, [100, 80, 70, 50, 40, 30, 20, 10, 5, 5, 60, 50, 30, 20, 10]),
-  },
-  {
-    id: 'cloak-redraw', name: '披风重绘', category: '概率重绘', mode: 'draw', symbol: '▧', accent: '#69dbb2', accentSoft: '#173c34',
-    description: '按公示概率随机获得一种图腾名称。', sourceNote: '十三种图腾概率合计 100%。',
-    drawOptions: [
-      { label: '鲲图腾', probability: 12 }, { label: '鹏图腾', probability: 12 }, { label: '天狼图腾', probability: 10 }, { label: '青犀图腾', probability: 10 }, { label: '雪狐图腾', probability: 10 }, { label: '金蟾图腾', probability: 10 },
-      { label: '灵蛇图腾', probability: 8 }, { label: '鬼车图腾', probability: 8 }, { label: '金狮图腾', probability: 8 }, { label: '青龙图腾', probability: 3 }, { label: '白虎图腾', probability: 3 }, { label: '朱雀图腾', probability: 3 }, { label: '玄武图腾', probability: 3 },
-    ],
-  },
-  {
-    id: 'soulforging', name: '魂化', category: '装备升阶', mode: 'upgrade', symbol: '◈', accent: '#7e96ff', accentSoft: '#20284a',
-    description: '覆盖 0–15 级的魂化成功率。', sourceNote: '失败后果未在公示表中说明；Mock 失败时不改等级。', minLevel: 0, maxLevel: 15,
-    rows: successOnlyRows(0, [100,100,100,40,30,20,10,5,5,3,10,5,4,3,1]),
   },
 ];
 
@@ -284,6 +261,27 @@ function visualTier(entry: ProbabilityItem, current: number) {
 }
 
 const tierNames = ['原初', '微光', '精炼', '星辉', '神话', '天穹'];
+
+const effectProfiles: Record<string, { effect: string; rite: string; catalyst: string }> = {
+  'burning-gem': { effect: 'flame', rite: '烈焰淬晶', catalyst: '炽炎之心' },
+  'annihilation-crown': { effect: 'crown', rite: '灭世加冕', catalyst: '暗雷王印' },
+  'crystal-ball': { effect: 'crystal', rite: '水晶共鸣', catalyst: '澄澈灵液' },
+  'harmony-cup': { effect: 'chalice', rite: '圣杯灌注', catalyst: '和谐圣泉' },
+  'sacred-chain': { effect: 'chain', rite: '圣链锻接', catalyst: '秘银链节' },
+  'mystic-talisman': { effect: 'talisman', rite: '敕令封印', catalyst: '灵符朱砂' },
+  'guardian-star': { effect: 'guardian', rite: '星盾守护', catalyst: '守望星屑' },
+  'element-compass': { effect: 'compass', rite: '元素跃迁', catalyst: '四象磁针' },
+  'moon-myth': { effect: 'moon', rite: '星月蚀刻', catalyst: '星云砂砾' },
+  'divine-ascension': { effect: 'ascension', rite: '神装升阶', catalyst: '登神金羽' },
+  'holy-gift': { effect: 'blessing', rite: '圣赐降临', catalyst: '神圣辉光' },
+  'holy-devotion': { effect: 'devotion', rite: '虔诚祈愿', catalyst: '祷告白羽' },
+  'primordial-spirit': { effect: 'spirit', rite: '元神归一', catalyst: '太初魂息' },
+  mophone: { effect: 'cyber', rite: '机芯超频', catalyst: '量子芯片' },
+  'goddess-fate': { effect: 'fate', rite: '命运编织', catalyst: '女神丝线' },
+  'divine-craft': { effect: 'hammer', rite: '鬼斧锻打', catalyst: '神工火种' },
+  earring: { effect: 'earring', rite: '双环鸣奏', catalyst: '月银铃音' },
+  wanxiang: { effect: 'constellation', rite: '万象演星', catalyst: '天机星轨' },
+};
 
 export default function Home() {
   const initialLevels = useMemo(() => Object.fromEntries(items.filter((item) => item.mode !== 'draw').map((item) => [item.id, item.minLevel ?? 0])), []);
@@ -400,7 +398,7 @@ export default function Home() {
       setAttempts((current) => [...generated.reverse(), ...current].slice(0, 120));
       setLastAttempt(generated[0]);
       setIsRolling(false);
-    }, times === 1 ? 460 : 720);
+    }, times === 1 ? 920 : 1280);
   }
 
   function resetSession() {
@@ -417,6 +415,7 @@ export default function Home() {
   const levelName = item.mode === 'adaptive' ? `${level} 星` : item.mode === 'check' ? `${level} 档` : `+${level}`;
   const tier = visualTier(item, level);
   const tierProgress = item.mode === 'draw' ? 0 : Math.round(((level - (item.minLevel ?? 0)) / Math.max(1, (item.maxLevel ?? 1) - (item.minLevel ?? 0))) * 100);
+  const effectProfile = effectProfiles[item.id];
 
   function shiftLevel(delta: number) {
     selectLevel(Math.min(maxSelectable, Math.max(item.minLevel ?? 0, level + delta)));
@@ -435,7 +434,7 @@ export default function Home() {
 
       <section className="forge-layout">
         <aside className="catalog-panel">
-          <div className="catalog-heading"><div><span>旅团背包</span><b>{items.length}/22</b></div><small>选择要锻造的道具</small></div>
+          <div className="catalog-heading"><div><span>旅团背包</span><b>{items.length}/18</b></div><small>选择要锻造的道具</small></div>
           <label className="search-box"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索道具或别名" /></label>
           <div className="category-list" aria-label="道具分类">
             {categories.map((entry) => <button key={entry} type="button" className={category === entry ? 'active' : ''} onClick={() => setCategory(entry)}>{entry}</button>)}
@@ -458,17 +457,17 @@ export default function Home() {
             <div className="hero-status"><div className={`tier-badge tier-${tier}`}><small>道具境界</small><b>{item.mode === 'draw' ? '秘宝' : tierNames[tier]}</b></div><div className="independent-badge"><b>命运独立</b><span>每次锻造重新判定</span></div></div>
           </header>
 
-          <div className={`forge-chamber tier-${tier} ${lastAttempt ? `echo-${outcomeStyle(lastAttempt.kind)}` : ''}`} key={`${item.id}-${lastAttempt?.id ?? 'idle'}`} style={{ '--tier-progress': `${tierProgress}%` } as CSSProperties}>
-            <div className="floating-rune rune-one">✦</div><div className="floating-rune rune-two">⌁</div><div className="floating-rune rune-three">◇</div>
+          <div className={`forge-chamber fx-${effectProfile.effect} tier-${tier} ${lastAttempt ? `echo-${outcomeStyle(lastAttempt.kind)}` : ''}`} key={`${item.id}-${lastAttempt?.id ?? 'idle'}`} style={{ '--tier-progress': `${tierProgress}%` } as CSSProperties}>
             <div className="altar-glow" />
-            <div className={`artifact-wrap tier-${tier}`}>
-              <div className="ascension-halo halo-one" /><div className="ascension-halo halo-two" />
-              <div className="orbit orbit-one" /><div className="orbit orbit-two" />
-              <div className="artifact-wings"><i /><i /></div>
-              <div className="artifact-crown"><i>◆</i><b>✦</b></div>
-              <div className="artifact"><span>{item.symbol}</span></div>
-              <div className="rune-shards">{Array.from({ length: 8 }, (_, index) => <i key={index} />)}</div>
+            <div className={`effect-stage tier-${tier}`}>
+              <div className="effect-visual">
+                <div className="effect-field" />
+                <div className="effect-particles">{Array.from({ length: 8 }, (_, index) => <i key={index} />)}</div>
+                <span className="effect-glyph">{item.symbol}</span>
+                <div className="effect-detail"><i /><i /><i /><i /></div>
+              </div>
               {item.mode !== 'draw' && <b className="artifact-level">{levelName}</b>}
+              <small className="rite-name">{effectProfile.rite}</small>
             </div>
             <div className="artifact-name"><span>{item.mode === 'draw' ? '等待唤醒' : canForge ? `${tierNames[tier]}境 · 等待强化` : '已臻至最高境界'}</span><h3>{item.name}</h3><div className="evolution-track" aria-label={`成长进度 ${tierProgress}%`}>{Array.from({ length: 6 }, (_, index) => <i key={index} className={index <= tier ? 'lit' : ''} />)}</div></div>
             {item.mode !== 'draw' && (
@@ -486,7 +485,7 @@ export default function Home() {
               <div className="section-title"><div><span>✧</span><h3>锻造祭品</h3></div><small>试炼场无限供应</small></div>
               <div className="offering-slots">
                 <div><i>{item.symbol}</i><span>主道具</span><b>{item.name}</b></div>
-                <div><i>✦</i><span>{item.mode === 'draw' ? '唤灵媒介' : item.mode === 'check' ? '祈愿媒介' : '强化媒介'}</span><b>星辉结晶</b></div>
+                <div><i>✦</i><span>{item.mode === 'draw' ? '唤灵媒介' : item.mode === 'check' ? '祈愿媒介' : '强化媒介'}</span><b>{effectProfile.catalyst}</b></div>
                 <div><i>●</i><span>锻造费用</span><b>{item.mode === 'draw' ? '1,200' : `${600 + level * 240}`} 金</b></div>
               </div>
             </section>
