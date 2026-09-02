@@ -412,6 +412,7 @@ export default function Home() {
     }
     if (!generated.length) return;
     setIsRolling(true);
+    const feedbackDelay = item.id === 'burning-gem' ? (times === 1 ? 360 : 620) : (times === 1 ? 920 : 1280);
     window.setTimeout(() => {
       if (item.mode === 'upgrade' || item.mode === 'adaptive') setLevels((current) => ({ ...current, [item.id]: currentLevel }));
       if (item.mode === 'adaptive') setAttemptCount(currentCount);
@@ -422,7 +423,7 @@ export default function Home() {
       setAttempts((current) => [...generated.reverse(), ...current].slice(0, 120));
       setLastAttempt(generated[0]);
       setIsRolling(false);
-    }, times === 1 ? 920 : 1280);
+    }, feedbackDelay);
   }
 
   function resetSession() {
@@ -488,7 +489,7 @@ export default function Home() {
             <div className={`effect-stage tier-${tier}`}>
               <div className="effect-visual">
                 <div className="effect-field" />
-                <div className="effect-particles">{Array.from({ length: 8 }, (_, index) => <i key={index} />)}</div>
+                <div className="effect-particles">{Array.from({ length: item.id === 'burning-gem' ? 14 : 8 }, (_, index) => <i key={index} />)}</div>
                 <span className="effect-glyph">{item.symbol}</span>
                 <div className="effect-detail"><i /><i /><i /><i /></div>
               </div>
