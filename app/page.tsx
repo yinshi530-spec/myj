@@ -488,10 +488,28 @@ export default function Home() {
             {item.mode !== 'draw' && <div className="level-route"><div className="level-focus"><span>当前等级</span><b>{levelLabel(level)}</b><i>→</i><span>目标等级</span><strong>{canForge ? nextLevelLabel : 'MAX'}</strong></div><div className="level-steps">{Array.from({ length: maxSelectable - (item.minLevel ?? 0) + 1 }, (_, index) => (item.minLevel ?? 0) + index).map((step) => <button type="button" key={step} className={step === level ? 'current' : step < level ? 'done' : ''} onClick={() => selectLevel(step)} aria-label={`选择${levelLabel(step)}`}><i /><span>{step}</span></button>)}</div></div>}
             <div className={`effect-stage tier-${tier}`}>
               <div className="effect-visual">
-                <div className="effect-field" />
-                <div className="effect-particles">{Array.from({ length: item.id === 'burning-gem' ? 14 : 8 }, (_, index) => <i key={index} />)}</div>
-                <span className="effect-glyph">{item.symbol}</span>
-                <div className="effect-detail"><i /><i /><i /><i /></div>
+                {item.id === 'burning-gem' ? (
+                  <>
+                    <div className="burning-gem-art" role="img" aria-label="被烈焰包裹的燃烧宝石">
+                      <div className="gem-fire fire-back">{Array.from({ length: 7 }, (_, index) => <i key={index} />)}</div>
+                      <div className="gem-stone">
+                        <i className="facet facet-left" />
+                        <i className="facet facet-center" />
+                        <i className="facet facet-right" />
+                        <b className="gem-glint" />
+                      </div>
+                      <div className="gem-fire fire-front">{Array.from({ length: 4 }, (_, index) => <i key={index} />)}</div>
+                    </div>
+                    <div className="effect-particles burning-embers">{Array.from({ length: 18 }, (_, index) => <i key={index} />)}</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="effect-field" />
+                    <div className="effect-particles">{Array.from({ length: 8 }, (_, index) => <i key={index} />)}</div>
+                    <span className="effect-glyph">{item.symbol}</span>
+                    <div className="effect-detail"><i /><i /><i /><i /></div>
+                  </>
+                )}
               </div>
               {item.mode !== 'draw' && <b className="artifact-level">{levelName}</b>}
               <small className="rite-name">{effectProfile.rite}</small>
