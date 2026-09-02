@@ -13,18 +13,18 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: '猫游记 · 道具强化测试',
-  description: '按猫游记官方“概率公示Ⅱ”复现燃烧宝石与星月神话的强化等级变化。',
+  title: '猫游记 · 天穹工坊',
+  description: '覆盖官方《概率公示Ⅱ》24 组道具的强化、升阶、祈愿与重绘冒险。',
   openGraph: {
-    title: '猫游记 · 道具强化测试',
-    description: '燃烧宝石 × 星月神话｜官方概率规则',
-    images: [{ url: '/maoyouji-official-bg.jpg', alt: '猫游记官方视觉' }],
+    title: '猫游记 · 天穹工坊',
+    description: '24 组官方公示道具 · 独立概率锻造冒险',
+    images: [{ url: '/og.png', alt: '猫游记天穹工坊' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: '猫游记 · 道具强化测试',
-    description: '燃烧宝石 × 星月神话｜官方概率规则',
-    images: ['/maoyouji-official-bg.jpg'],
+    title: '猫游记 · 天穹工坊',
+    description: '24 组官方公示道具 · 独立概率锻造冒险',
+    images: ['/og.png'],
   },
 };
 
