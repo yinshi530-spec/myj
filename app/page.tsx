@@ -1120,7 +1120,7 @@ export default function Home() {
                 );
               }
               return (
-                <section key={entry.id} className={`item-stack tier-${visualTier(entry, strongestLevel)} ${entry.id === item.id ? 'active' : ''}`} style={{ '--group-accent': strongestPalette.accent, '--group-soft': strongestPalette.soft } as CSSProperties} aria-label={`${entry.name}，共 ${instances.length} 件独立装备`}>
+                <section key={entry.id} className={`item-stack copies-${instances.length} tier-${visualTier(entry, strongestLevel)} ${entry.id === item.id ? 'active' : ''}`} style={{ '--group-accent': strongestPalette.accent, '--group-soft': strongestPalette.soft } as CSSProperties} aria-label={`${entry.name}，共 ${instances.length} 件独立装备`}>
                   <header className="item-stack-heading">
                     <span className="item-symbol" style={{ '--card-accent': strongestPalette.accent, '--card-soft': strongestPalette.soft } as CSSProperties}>{entry.symbol}</span>
                     <span><b>{entry.name}</b><small>{instances.length} 件独立培养 · ¥{costRules[entry.id] ?? '—'} / 件次</small></span>

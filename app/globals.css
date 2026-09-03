@@ -53,6 +53,17 @@ button,input { font:inherit; } button { border:0; }
 .copy-meta small { overflow:hidden; color:#625e57; font:600 6px "Noto Serif SC",serif; text-overflow:ellipsis; white-space:nowrap; }
 .copy-meter { grid-area:meter; align-self:end; width:100%; height:3px; overflow:hidden; border-radius:2px; background:#252620; box-shadow:inset 0 1px 2px rgba(0,0,0,.6); }
 .copy-meter>i { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,color-mix(in srgb,var(--copy-accent) 52%,#5c5241),var(--copy-accent)); box-shadow:0 0 7px var(--copy-accent); transition:width .22s ease; }
+.item-stack.copies-2 .item-copy-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.item-stack.copies-5 .item-copy-grid { grid-template-columns:repeat(5,minmax(0,1fr)); gap:4px; }
+.item-stack.copies-5 .item-copy-grid button { height:88px; grid-template-columns:1fr; grid-template-rows:13px 29px 26px 4px; grid-template-areas:"index" "relic" "meta" "meter"; gap:3px; padding:6px 4px 5px; }
+.item-stack.copies-5 .copy-index { justify-content:center; }
+.item-stack.copies-5 .copy-index>b { max-width:100%; font-size:6px; letter-spacing:0; }
+.item-stack.copies-5 .copy-index>i { display:none; }
+.item-stack.copies-5 .copy-relic { justify-self:center; width:25px; height:25px; }
+.item-stack.copies-5 .copy-relic>b { font-size:11px; }
+.item-stack.copies-5 .copy-meta { justify-items:center; text-align:center; }
+.item-stack.copies-5 .copy-meta strong { font-size:10px; line-height:1; }
+.item-stack.copies-5 .copy-meta small { max-width:100%; font-size:5px; }
 .item-copy-grid button.active { border-color:color-mix(in srgb,var(--copy-accent) 78%,#ffe2a1); color:#fff3d7; background:radial-gradient(circle at 22% 46%,color-mix(in srgb,var(--copy-accent) 27%,transparent),transparent 48%),linear-gradient(145deg,color-mix(in srgb,var(--copy-soft) 74%,#1c211f),#0a0e13); box-shadow:inset 0 0 19px color-mix(in srgb,var(--copy-accent) 13%,transparent),0 0 0 1px color-mix(in srgb,var(--copy-accent) 22%,transparent),0 8px 18px rgba(0,0,0,.34); transform:translateY(-2px); }
 .item-copy-grid button.active::before,.item-copy-grid button.active::after { width:16px; height:16px; opacity:1; filter:drop-shadow(0 0 4px var(--copy-accent)); }
 .item-copy-grid button.active .copy-index>b { color:color-mix(in srgb,var(--copy-accent) 86%,#fff2cf); text-shadow:0 0 8px color-mix(in srgb,var(--copy-accent) 46%,transparent); }
