@@ -68,7 +68,7 @@ type ResultFeedback = {
 
 type StoredSession = {
   version: 1;
-  costModel?: 'quantity-adjusted-v1' | 'quantity-adjusted-v2';
+  costModel?: 'quantity-adjusted-v1' | 'quantity-adjusted-v2' | 'individual-items-v3';
   selectedId: string;
   levels: Record<string, number>;
   targetLevels: Record<string, number>;
@@ -97,8 +97,15 @@ type AutoTargetRun = {
   target: number;
 };
 
+type ItemInstance = {
+  id: string;
+  item: ProbabilityItem;
+  index: number;
+  quantity: number;
+};
+
 const sessionStorageKey = 'myj-forge-session-v1';
-const quantityAdjustedCostModel = 'quantity-adjusted-v2' as const;
+const individualItemsCostModel = 'individual-items-v3' as const;
 const autoTargetLimits: Record<string, number> = { 'burning-gem': 8, 'moon-myth': 9 };
 const itemQuantities: Record<string, number> = {
   'crystal-ball': 5,
@@ -107,6 +114,10 @@ const itemQuantities: Record<string, number> = {
   'goddess-fate': 3,
   earring: 2,
 };
+
+function itemInstanceId(itemId: string, index = 0) {
+  return (itemQuantities[itemId] ?? 1) > 1 ? `${itemId}:${index + 1}` : itemId;
+}
 const outcomeKinds: OutcomeKind[] = ['success', 'jump', 'stay', 'down', 'fail', 'protected', 'draw'];
 
 function isStoredAttempt(value: unknown): value is Attempt {
@@ -392,7 +403,7 @@ const items: ProbabilityItem[] = [
   },
   {
     id: 'crystal-ball', name: '水晶球', category: '宝石与圣器', mode: 'upgrade', symbol: '●', accent: '#65c7ff', accentSoft: '#153249',
-    description: '共 5 个，每次升级合计 ¥15（¥3 × 5），失败时保持当前等级。', sourceNote: '公示等级范围为 1→2 至 9→10。', minLevel: 1, maxLevel: 10,
+    description: '共 5 个，每个独立强化，每次升级当前水晶球花费 ¥3。', sourceNote: '公示等级范围为 1→2 至 9→10，失败时保持当前等级。', minLevel: 1, maxLevel: 10,
     rows: stayRows(1, [100, 70, 50, 30, 20, 15, 10, 5, 1]),
   },
   {
@@ -416,12 +427,12 @@ const items: ProbabilityItem[] = [
   },
   {
     id: 'moon-myth', name: '星月神话', aliases: ['星云沙'], category: '宝石与圣器', mode: 'upgrade', symbol: '☾', accent: '#a78bfa', accentSoft: '#2a2148',
-    description: '共 5 份，每次升级合计 ¥25（¥5 × 5）。', sourceNote: '与星云沙共用成功、不变、降级概率。', minLevel: 0, maxLevel: 10,
+    description: '共 5 份，每份独立强化，每次升级当前星月神话花费 ¥5。', sourceNote: '与星云沙共用成功、不变、降级概率。', minLevel: 0, maxLevel: 10,
     rows: standardRows([[100, 0, 0], [90, 10, 0], [80, 10, 10], [60, 30, 10], [40, 40, 20], [30, 40, 30], [20, 45, 35], [15, 45, 40], [5, 50, 45], [2, 50, 48]]),
   },
   {
     id: 'holy-gift', name: '圣之赐', aliases: ['神圣之力'], category: '装备升阶', mode: 'upgrade', symbol: '✚', accent: '#f4d66f', accentSoft: '#40361b',
-    description: '共 5 份，每次升级合计 ¥25（¥5 × 5），+2、+4、+6、+8 为保级点。', sourceNote: '失败时回落到最近的保级点，不会跌破已达到的 +2、+4、+6、+8。', minLevel: 0, maxLevel: 10,
+    description: '共 5 份，每份独立强化，¥5 / 次，+2、+4、+6、+8 为保级点。', sourceNote: '失败时回落到当前圣之赐最近的保级点。', minLevel: 0, maxLevel: 10,
     rows: explicitRows([[0,100,1,null],[1,100,2,null],[2,90,3,2],[3,80,4,2],[4,50,5,4],[5,50,6,4],[6,30,7,6],[7,15,8,6],[8,10,9,8],[9,2,10,8]]),
   },
   {
@@ -436,12 +447,12 @@ const items: ProbabilityItem[] = [
   },
   {
     id: 'goddess-fate', name: '命运女神', aliases: ['女神的祝福'], category: '装备升阶', mode: 'upgrade', symbol: '♢', accent: '#ff8fc5', accentSoft: '#421f36',
-    description: '共 3 个，每次升级合计 ¥24（¥8 × 3），+4、+6、+8 为保级点。', sourceNote: '失败时回落到最近保级点，不会跌破已达到的 +4、+6、+8。', minLevel: 0, maxLevel: 10,
+    description: '共 3 个，每个独立强化，¥8 / 次，+4、+6、+8 为保级点。', sourceNote: '失败时回落到当前命运女神最近的保级点。', minLevel: 0, maxLevel: 10,
     rows: checkpointRows(0, [100, 100, 100, 100, 25, 25, 70, 50, 20, 5], [0, 4, 6, 8]),
   },
   {
     id: 'earring', name: '耳环', category: '装备升阶', mode: 'upgrade', symbol: '◌', accent: '#cb9bff', accentSoft: '#312047',
-    description: '共 2 个，每次升级合计 ¥16（¥8 × 2），+4、+6、+8、+10、+13 为保级点。', sourceNote: '失败时回落到最近保级点，不会跌破已经达到的保级等级。', minLevel: 0, maxLevel: 15,
+    description: '共 2 个，每个独立强化，¥8 / 次，+4、+6、+8、+10、+13 为保级点。', sourceNote: '失败时回落到当前耳环最近的保级点。', minLevel: 0, maxLevel: 15,
     rows: checkpointRows(0, [100, 100, 100, 100, 25, 25, 70, 50, 20, 5, 100, 50, 30, 20, 5], [0, 4, 6, 8, 10, 13]),
   },
   {
@@ -456,6 +467,22 @@ const items: ProbabilityItem[] = [
     ],
   },
 ];
+
+const itemInstances: ItemInstance[] = items.flatMap((item) => {
+  const quantity = itemQuantities[item.id] ?? 1;
+  return Array.from({ length: quantity }, (_, index) => ({
+    id: itemInstanceId(item.id, index),
+    item,
+    index,
+    quantity,
+  }));
+});
+
+const autoTargetInstanceLimits: Record<string, number> = Object.fromEntries(
+  itemInstances
+    .filter((instance) => autoTargetLimits[instance.item.id] !== undefined)
+    .map((instance) => [instance.id, autoTargetLimits[instance.item.id]]),
+);
 
 function bandIndex(count: number) {
   if (count <= 40) return 0;
@@ -537,10 +564,10 @@ function levelPalette(item: ProbabilityItem, level: number) {
 }
 
 export default function Home() {
-  const initialLevels = useMemo(() => Object.fromEntries(items.filter((item) => item.mode !== 'draw').map((item) => [item.id, item.minLevel ?? 0])), []);
-  const [selectedId, setSelectedId] = useState(items[0].id);
+  const initialLevels = useMemo(() => Object.fromEntries(itemInstances.filter((instance) => instance.item.mode !== 'draw').map((instance) => [instance.id, instance.item.minLevel ?? 0])), []);
+  const [selectedId, setSelectedId] = useState(itemInstances[0].id);
   const [levels, setLevels] = useState<Record<string, number>>(initialLevels);
-  const [targetLevels, setTargetLevels] = useState<Record<string, number>>({ ...autoTargetLimits });
+  const [targetLevels, setTargetLevels] = useState<Record<string, number>>({ ...autoTargetInstanceLimits });
   const [autoTargetRun, setAutoTargetRun] = useState<AutoTargetRun | null>(null);
   const [attemptCount, setAttemptCount] = useState(1);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
@@ -568,7 +595,7 @@ export default function Home() {
       const stored = JSON.parse(rawSession) as Partial<StoredSession>;
       if (stored.version !== 1) return;
       const quantityMigrationMultiplier = (itemId: string) => {
-        if (stored.costModel === quantityAdjustedCostModel) return 1;
+        if (stored.costModel === individualItemsCostModel || stored.costModel === 'quantity-adjusted-v2') return 1;
         if (stored.costModel === 'quantity-adjusted-v1') return itemId === 'holy-gift' ? 5 : 1;
         return itemQuantities[itemId] ?? 1;
       };
@@ -580,24 +607,30 @@ export default function Home() {
         })
         : [];
 
-      if (typeof stored.selectedId === 'string' && items.some((entry) => entry.id === stored.selectedId)) {
-        setSelectedId(stored.selectedId);
+      if (typeof stored.selectedId === 'string') {
+        if (itemInstances.some((instance) => instance.id === stored.selectedId)) {
+          setSelectedId(stored.selectedId);
+        } else if (items.some((entry) => entry.id === stored.selectedId)) {
+          setSelectedId(itemInstanceId(stored.selectedId));
+        }
       }
       if (stored.levels && typeof stored.levels === 'object') {
         const restoredLevels = { ...initialLevels };
-        items.filter((entry) => entry.mode !== 'draw').forEach((entry) => {
-          const storedLevel = stored.levels?.[entry.id];
+        itemInstances.filter((instance) => instance.item.mode !== 'draw').forEach((instance) => {
+          const entry = instance.item;
+          const storedLevel = stored.levels?.[instance.id] ?? stored.levels?.[entry.id];
           if (typeof storedLevel !== 'number' || !Number.isFinite(storedLevel)) return;
-          restoredLevels[entry.id] = Math.min(entry.maxLevel ?? storedLevel, Math.max(entry.minLevel ?? 0, Math.floor(storedLevel)));
+          restoredLevels[instance.id] = Math.min(entry.maxLevel ?? storedLevel, Math.max(entry.minLevel ?? 0, Math.floor(storedLevel)));
         });
         setLevels(restoredLevels);
       }
       if (stored.targetLevels && typeof stored.targetLevels === 'object') {
-        const restoredTargets = { ...autoTargetLimits };
-        Object.entries(autoTargetLimits).forEach(([itemId, limit]) => {
-          const storedTarget = stored.targetLevels?.[itemId];
+        const restoredTargets = { ...autoTargetInstanceLimits };
+        Object.entries(autoTargetInstanceLimits).forEach(([instanceId, limit]) => {
+          const baseItemId = itemInstances.find((instance) => instance.id === instanceId)?.item.id ?? instanceId;
+          const storedTarget = stored.targetLevels?.[instanceId] ?? stored.targetLevels?.[baseItemId];
           if (typeof storedTarget !== 'number' || !Number.isFinite(storedTarget)) return;
-          restoredTargets[itemId] = Math.min(limit, Math.max(1, Math.floor(storedTarget)));
+          restoredTargets[instanceId] = Math.min(limit, Math.max(1, Math.floor(storedTarget)));
         });
         setTargetLevels(restoredTargets);
       }
@@ -632,10 +665,22 @@ export default function Home() {
           itemSpend[itemId] = spend * multiplier;
           knownSpend += spend * (multiplier - 1);
         });
+        const separatedItemSpend: Record<string, number> = {};
+        Object.entries(itemSpend).forEach(([itemId, spend]) => {
+          const quantity = itemQuantities[itemId] ?? 1;
+          if (quantity > 1 && !itemId.includes(':')) {
+            for (let index = 0; index < quantity; index += 1) {
+              const instanceId = itemInstanceId(itemId, index);
+              separatedItemSpend[instanceId] = (separatedItemSpend[instanceId] ?? 0) + (spend / quantity);
+            }
+            return;
+          }
+          separatedItemSpend[itemId] = (separatedItemSpend[itemId] ?? 0) + spend;
+        });
         setCostLedger({
           knownSpend,
           pricedAttempts: Math.max(0, Math.floor(stored.costLedger.pricedAttempts)),
-          itemSpend,
+          itemSpend: separatedItemSpend,
         });
       }
     } catch (error) {
@@ -649,7 +694,7 @@ export default function Home() {
     if (!hasHydrated) return;
     const stored: StoredSession = {
       version: 1,
-      costModel: quantityAdjustedCostModel,
+      costModel: individualItemsCostModel,
       selectedId,
       levels,
       targetLevels,
@@ -681,8 +726,11 @@ export default function Home() {
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [costDetailsOpen, graduationPosterOpen]);
 
-  const item = items.find((entry) => entry.id === selectedId) ?? items[0];
-  const level = levels[item.id] ?? item.minLevel ?? 0;
+  const selectedInstance = itemInstances.find((instance) => instance.id === selectedId) ?? itemInstances[0];
+  const item = selectedInstance.item;
+  const itemKey = selectedInstance.id;
+  const itemInstanceNumber = selectedInstance.index + 1;
+  const level = levels[itemKey] ?? item.minLevel ?? 0;
   const currentRow = item.rows?.find((row) => row.current === level);
   const adaptiveRow = level >= (item.maxLevel ?? 10)
     ? undefined
@@ -696,40 +744,45 @@ export default function Home() {
   }, { total: 0, success: 0, risk: 0 }), [attempts]);
 
   const accountProgress = useMemo(() => {
-    const progress = items.map((entry) => {
+    const progress = itemInstances.map((instance) => {
+      const entry = instance.item;
       const min = entry.minLevel ?? 0;
       const max = entry.maxLevel ?? min + 1;
-      return ((levels[entry.id] ?? min) - min) / Math.max(1, max - min);
+      return ((levels[instance.id] ?? min) - min) / Math.max(1, max - min);
     });
     return Math.round((progress.reduce((sum, value) => sum + value, 0) / progress.length) * 100);
   }, [levels]);
 
-  const completedItems = useMemo(() => items.filter((entry) => (levels[entry.id] ?? entry.minLevel ?? 0) >= (entry.maxLevel ?? 1)).length, [levels]);
-  const burningGraduated = (levels['burning-gem'] ?? 0) >= 8;
-  const moonGraduated = (levels['moon-myth'] ?? 0) >= 9;
-  const otherItemsGraduated = items
-    .filter((entry) => entry.id !== 'burning-gem' && entry.id !== 'moon-myth')
-    .every((entry) => (levels[entry.id] ?? entry.minLevel ?? 0) >= Math.min(10, entry.maxLevel ?? 10));
+  const completedItems = useMemo(() => itemInstances.filter((instance) => (levels[instance.id] ?? instance.item.minLevel ?? 0) >= (instance.item.maxLevel ?? 1)).length, [levels]);
+  const burningGraduated = itemInstances
+    .filter((instance) => instance.item.id === 'burning-gem')
+    .every((instance) => (levels[instance.id] ?? 0) >= 8);
+  const moonGraduated = itemInstances
+    .filter((instance) => instance.item.id === 'moon-myth')
+    .every((instance) => (levels[instance.id] ?? 0) >= 9);
+  const otherItemsGraduated = itemInstances
+    .filter((instance) => instance.item.id !== 'burning-gem' && instance.item.id !== 'moon-myth')
+    .every((instance) => (levels[instance.id] ?? instance.item.minLevel ?? 0) >= Math.min(10, instance.item.maxLevel ?? 10));
   const graduationReady = burningGraduated && moonGraduated && otherItemsGraduated;
-  const costDetailItems = items.map((entry) => {
-    const currentLevel = levels[entry.id] ?? entry.minLevel ?? 0;
-    const quantity = itemQuantities[entry.id] ?? 1;
+  const costDetailItems = itemInstances.map((instance) => {
+    const entry = instance.item;
+    const currentLevel = levels[instance.id] ?? entry.minLevel ?? 0;
     const unitCost = costRules[entry.id] ?? null;
     return {
-      id: entry.id,
-      name: entry.name,
+      id: instance.id,
+      baseItemId: entry.id,
+      name: instance.quantity > 1 ? `${entry.name} · ${instance.index + 1}号` : entry.name,
       level: entry.mode === 'adaptive' ? `${currentLevel}★` : `+${currentLevel}`,
-      quantity,
       unitCost,
-      attemptCost: unitCost === null ? null : unitCost * quantity,
-      spend: costLedger.itemSpend[entry.id] ?? 0,
+      attemptCost: unitCost,
+      spend: costLedger.itemSpend[instance.id] ?? 0,
     };
   });
   const categorizedCost = costDetailItems.reduce((sum, entry) => sum + entry.spend, 0);
   const uncategorizedCost = Math.max(0, costLedger.knownSpend - categorizedCost);
-  const autoTargetLimit = autoTargetLimits[item.id] ?? null;
-  const targetLevel = autoTargetLimit === null ? null : Math.min(autoTargetLimit, Math.max(1, targetLevels[item.id] ?? autoTargetLimit));
-  const isAutoTargetRunning = autoTargetRun?.itemId === item.id;
+  const autoTargetLimit = autoTargetInstanceLimits[itemKey] ?? null;
+  const targetLevel = autoTargetLimit === null ? null : Math.min(autoTargetLimit, Math.max(1, targetLevels[itemKey] ?? autoTargetLimit));
+  const isAutoTargetRunning = autoTargetRun?.itemId === itemKey;
 
   const outcomes = useMemo(() => {
     if (item.mode === 'draw') return (item.drawOptions ?? []).map((option) => ({ key: option.label, label: option.label, probability: option.probability, target: null, kind: 'draw' as const }));
@@ -743,14 +796,14 @@ export default function Home() {
     return currentRow?.outcomes ?? [];
   }, [adaptiveRow, attemptCount, currentRow, item]);
 
-  function chooseItem(next: ProbabilityItem) {
+  function chooseItem(next: ItemInstance) {
     stopAutoTargetRun();
     setSelectedId(next.id);
     setLastAttempt(null);
     setResultFeedbacks([]);
   }
 
-  function createAttempt(activeItem: ProbabilityItem, currentLevel: number, count: number, sequence: number) {
+  function createAttempt(activeItem: ProbabilityItem, activeItemKey: string, activeInstanceNumber: number, currentLevel: number, count: number, sequence: number) {
     let available: Outcome[] = [];
     let fromLabel = activeItem.mode === 'draw' ? '触发' : `+${currentLevel}`;
 
@@ -787,15 +840,15 @@ export default function Home() {
     const itemQuantity = itemQuantities[activeItem.id] ?? 1;
     const attempt: Attempt = {
       id: Date.now() + sequence,
-      itemId: activeItem.id,
-      itemName: `${activeItem.name}${itemQuantity > 1 ? ` ×${itemQuantity}` : ''}`,
+      itemId: activeItemKey,
+      itemName: `${activeItem.name}${itemQuantity > 1 ? ` · ${activeInstanceNumber}号` : ''}`,
       fromLabel,
       resultLabel: protectionTriggered ? '保护生效 · 保持等级' : picked.label,
       toLabel: activeItem.mode === 'draw' ? picked.label : activeItem.mode === 'adaptive' ? `${nextLevel} 星` : `+${nextLevel}`,
       probability: picked.probability,
       roll: Number(roll.toFixed(2)),
       kind: protectionTriggered ? 'protected' : picked.kind,
-      cost: baseCost === undefined ? null : (baseCost * itemQuantity) + (protectionEnabled ? guardianProtectionCost : 0),
+      cost: baseCost === undefined ? null : baseCost + (protectionEnabled ? guardianProtectionCost : 0),
     };
     return { attempt, nextLevel };
   }
@@ -806,7 +859,7 @@ export default function Home() {
     let currentCount = attemptCount;
     const generated: Attempt[] = [];
     for (let index = 0; index < times; index += 1) {
-      const result = createAttempt(item, currentLevel, currentCount, index);
+      const result = createAttempt(item, itemKey, itemInstanceNumber, currentLevel, currentCount, index);
       if (!result) break;
       generated.push(result.attempt);
       if (item.mode === 'upgrade' || item.mode === 'adaptive') currentLevel = result.nextLevel;
@@ -816,13 +869,13 @@ export default function Home() {
     const applyResults = () => {
       pendingForgeTimer.current = null;
       const latestAttempts = [...generated].reverse();
-      if (item.mode === 'upgrade' || item.mode === 'adaptive') setLevels((current) => ({ ...current, [item.id]: currentLevel }));
+      if (item.mode === 'upgrade' || item.mode === 'adaptive') setLevels((current) => ({ ...current, [itemKey]: currentLevel }));
       if (item.mode === 'adaptive') setAttemptCount(currentCount);
       const generatedSpend = generated.reduce((sum, attempt) => sum + (attempt.cost ?? 0), 0);
       setCostLedger((current) => ({
         knownSpend: current.knownSpend + generatedSpend,
         pricedAttempts: current.pricedAttempts + generated.filter((attempt) => attempt.cost !== null).length,
-        itemSpend: { ...current.itemSpend, [item.id]: (current.itemSpend[item.id] ?? 0) + generatedSpend },
+        itemSpend: { ...current.itemSpend, [itemKey]: (current.itemSpend[itemKey] ?? 0) + generatedSpend },
       }));
       setAttempts((current) => [...latestAttempts, ...current].slice(0, 120));
       const latestAttempt = latestAttempts[0];
@@ -859,7 +912,7 @@ export default function Home() {
       return;
     }
     if (targetLevel === null || level >= targetLevel || isRolling) return;
-    setAutoTargetRun({ itemId: item.id, target: targetLevel });
+    setAutoTargetRun({ itemId: itemKey, target: targetLevel });
     simulate(1, true);
   }
 
@@ -867,7 +920,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!autoTargetRun) return;
-    const limit = autoTargetLimits[autoTargetRun.itemId];
+    const limit = autoTargetInstanceLimits[autoTargetRun.itemId];
     const currentLevel = levels[autoTargetRun.itemId] ?? 0;
     const safeTarget = Math.min(limit ?? autoTargetRun.target, autoTargetRun.target);
     if (selectedId !== autoTargetRun.itemId || limit === undefined || currentLevel >= safeTarget) {
@@ -899,15 +952,23 @@ export default function Home() {
   function openGraduationPoster() {
     if (!graduationReady) return;
     const itemSpends: GraduationItemSpend[] = items.map((entry) => {
-      const currentLevel = levels[entry.id] ?? entry.minLevel ?? 0;
+      const instances = itemInstances.filter((instance) => instance.item.id === entry.id);
+      const currentLevels = instances.map((instance) => levels[instance.id] ?? entry.minLevel ?? 0);
+      const lowestLevel = Math.min(...currentLevels);
+      const highestLevel = Math.max(...currentLevels);
+      const levelPrefix = entry.mode === 'adaptive' ? '' : '+';
+      const levelSuffix = entry.mode === 'adaptive' ? '★' : '';
+      const level = lowestLevel === highestLevel
+        ? `${levelPrefix}${lowestLevel}${levelSuffix}${instances.length > 1 ? ` ×${instances.length}` : ''}`
+        : `${levelPrefix}${lowestLevel}–${levelPrefix}${highestLevel}${levelSuffix}`;
       return {
         id: entry.id,
-        name: entry.name,
-        level: entry.mode === 'adaptive' ? `${currentLevel}★` : `+${currentLevel}`,
-        spend: costLedger.itemSpend[entry.id] ?? 0,
+        name: instances.length > 1 ? `${entry.name} ×${instances.length}` : entry.name,
+        level,
+        spend: instances.reduce((sum, instance) => sum + (costLedger.itemSpend[instance.id] ?? 0), 0),
       };
     });
-    const recordedItemSpend = items.reduce((sum, entry) => sum + (costLedger.itemSpend[entry.id] ?? 0), 0);
+    const recordedItemSpend = itemInstances.reduce((sum, instance) => sum + (costLedger.itemSpend[instance.id] ?? 0), 0);
     const historicalSpend = Math.max(0, costLedger.knownSpend - recordedItemSpend);
     if (historicalSpend >= .01) {
       itemSpends.push({ id: 'legacy-history', name: '历史记录', level: '—', spend: historicalSpend });
@@ -970,9 +1031,9 @@ export default function Home() {
     setGraduationPosterOpen(false);
     setCostDetailsOpen(false);
     setGraduationSnapshot(null);
-    setSelectedId(items[0].id);
+    setSelectedId(itemInstances[0].id);
     setLevels(initialLevels);
-    setTargetLevels({ ...autoTargetLimits });
+    setTargetLevels({ ...autoTargetInstanceLimits });
     setAttemptCount(1);
     setAttempts([]);
     setIsRolling(false);
@@ -992,10 +1053,9 @@ export default function Home() {
   const tierProgress = item.mode === 'draw' ? 0 : Math.round(((level - (item.minLevel ?? 0)) / Math.max(1, (item.maxLevel ?? 1) - (item.minLevel ?? 0))) * 100);
   const effectProfile = effectProfiles[item.id];
   const unitCost = costRules[item.id] ?? null;
-  const itemQuantity = itemQuantities[item.id] ?? 1;
+  const itemQuantity = selectedInstance.quantity;
   const guardianProtectionEnabled = item.id === 'guardian-star' && guardianProtection;
-  const attemptUnitCost = unitCost === null ? null : (unitCost * itemQuantity) + (guardianProtectionEnabled ? guardianProtectionCost : 0);
-  const quantityCostLabel = unitCost !== null && itemQuantity > 1 ? `（¥${unitCost.toFixed(0)} × ${itemQuantity}）` : '';
+  const attemptUnitCost = unitCost === null ? null : unitCost + (guardianProtectionEnabled ? guardianProtectionCost : 0);
   const flameScale = 0.62 + (tierProgress / 100) * 0.83;
   const crownScale = 0.78 + (tierProgress / 100) * 0.38;
   const catalystScale = 0.76 + (tierProgress / 100) * 0.44;
@@ -1010,7 +1070,7 @@ export default function Home() {
   const levelLabel = (value: number) => item.mode === 'adaptive' ? `${value}★` : item.mode === 'check' ? `${value}档` : `+${value}`;
   const usesLevelOnlyFeedback = instantUpgradeItems.has(item.id);
   const feedbackClass = !usesLevelOnlyFeedback && lastAttempt ? `echo-${outcomeStyle(lastAttempt.kind)}` : '';
-  const feedbackKey = usesLevelOnlyFeedback ? item.id : `${item.id}-${lastAttempt?.id ?? 'idle'}`;
+  const feedbackKey = usesLevelOnlyFeedback ? itemKey : `${itemKey}-${lastAttempt?.id ?? 'idle'}`;
 
   return (
     <main className={`game-forge ${isRolling ? 'is-forging' : ''}`} style={theme}>
@@ -1026,22 +1086,58 @@ export default function Home() {
 
       <section className="forge-layout">
         <aside className="catalog-panel">
-          <div className="catalog-heading"><div><span>培养清单</span><b>{items.length} 项</b></div><small>逐项打造，最终汇总账号成本</small></div>
+          <div className="catalog-heading"><div><span>培养清单</span><b>{items.length} 类 · {itemInstances.length} 件</b></div><small>同名装备独立培养，点击编号切换本体</small></div>
           <div className="item-list">
-            {items.map((entry) => (
-              <button key={entry.id} type="button" className={`item-card tier-${visualTier(entry, levels[entry.id] ?? entry.minLevel ?? 0)} ${entry.id === item.id ? 'active' : ''}`} onClick={() => chooseItem(entry)}>
-                <span className="item-symbol" style={{ '--card-accent': levelPalette(entry, levels[entry.id] ?? entry.minLevel ?? 0).accent, '--card-soft': levelPalette(entry, levels[entry.id] ?? entry.minLevel ?? 0).soft } as CSSProperties}>{entry.symbol}</span>
-                <span><b>{entry.name}{(itemQuantities[entry.id] ?? 1) > 1 ? ` ×${itemQuantities[entry.id]}` : ''}</b><small>{entry.aliases?.length ? entry.aliases.join(' / ') : entry.category}</small><i className="item-meter"><i style={{ width: `${Math.round((((levels[entry.id] ?? entry.minLevel ?? 0) - (entry.minLevel ?? 0)) / Math.max(1, (entry.maxLevel ?? 1) - (entry.minLevel ?? 0))) * 100)}%` }} /></i></span>
-                <em>{entry.mode === 'draw' ? '秘宝' : entry.mode === 'adaptive' ? `${levels[entry.id] ?? 0}★` : entry.mode === 'check' ? `${levels[entry.id] ?? entry.minLevel}档` : `+${levels[entry.id] ?? entry.minLevel ?? 0}`}</em>
-              </button>
-            ))}
+            {items.map((entry) => {
+              const instances = itemInstances.filter((instance) => instance.item.id === entry.id);
+              const instanceLevels = instances.map((instance) => levels[instance.id] ?? entry.minLevel ?? 0);
+              const strongestLevel = Math.max(...instanceLevels);
+              const strongestPalette = levelPalette(entry, strongestLevel);
+              const completedCopies = instances.filter((instance) => (levels[instance.id] ?? entry.minLevel ?? 0) >= (entry.maxLevel ?? 1)).length;
+              if (instances.length === 1) {
+                const instance = instances[0];
+                const instanceLevel = instanceLevels[0];
+                const progress = Math.round(((instanceLevel - (entry.minLevel ?? 0)) / Math.max(1, (entry.maxLevel ?? 1) - (entry.minLevel ?? 0))) * 100);
+                return (
+                  <button key={entry.id} type="button" className={`item-card single-item-card tier-${visualTier(entry, instanceLevel)} ${instance.id === itemKey ? 'active' : ''}`} onClick={() => chooseItem(instance)} aria-pressed={instance.id === itemKey}>
+                    <span className="item-symbol" style={{ '--card-accent': strongestPalette.accent, '--card-soft': strongestPalette.soft } as CSSProperties}>{entry.symbol}</span>
+                    <span><b>{entry.name}</b><small>{entry.aliases?.length ? entry.aliases.join(' / ') : entry.category}</small><i className="item-meter"><i style={{ width: `${progress}%` }} /></i></span>
+                    <em>{entry.mode === 'draw' ? '秘宝' : entry.mode === 'adaptive' ? `${instanceLevel}★` : entry.mode === 'check' ? `${instanceLevel}档` : `+${instanceLevel}`}</em>
+                  </button>
+                );
+              }
+              return (
+                <section key={entry.id} className={`item-stack tier-${visualTier(entry, strongestLevel)} ${entry.id === item.id ? 'active' : ''}`} style={{ '--group-accent': strongestPalette.accent, '--group-soft': strongestPalette.soft } as CSSProperties} aria-label={`${entry.name}，共 ${instances.length} 件独立装备`}>
+                  <header className="item-stack-heading">
+                    <span className="item-symbol" style={{ '--card-accent': strongestPalette.accent, '--card-soft': strongestPalette.soft } as CSSProperties}>{entry.symbol}</span>
+                    <span><b>{entry.name}</b><small>{instances.length} 件独立培养 · ¥{costRules[entry.id] ?? '—'} / 件次</small></span>
+                    <em>{completedCopies}/{instances.length}</em>
+                  </header>
+                  <div className="item-copy-grid" role="group" aria-label={`选择${entry.name}编号`}>
+                    {instances.map((instance) => {
+                      const instanceLevel = levels[instance.id] ?? entry.minLevel ?? 0;
+                      const progress = Math.round(((instanceLevel - (entry.minLevel ?? 0)) / Math.max(1, (entry.maxLevel ?? 1) - (entry.minLevel ?? 0))) * 100);
+                      const isComplete = instanceLevel >= (entry.maxLevel ?? 1);
+                      const isActive = instance.id === itemKey;
+                      return (
+                        <button key={instance.id} type="button" className={`${isActive ? 'active' : ''} ${isComplete ? 'complete' : ''}`} onClick={() => chooseItem(instance)} aria-pressed={isActive} title={`${entry.name} ${instance.index + 1}号，当前 +${instanceLevel}`}>
+                          <span>{String(instance.index + 1).padStart(2, '0')}</span>
+                          <b>{entry.mode === 'adaptive' ? `${instanceLevel}★` : `+${instanceLevel}`}</b>
+                          <i><i style={{ width: `${progress}%` }} /></i>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })}
           </div>
         </aside>
 
         <section className="forge-stage">
           <div className={`forge-chamber fx-${effectProfile.effect} tier-${tier} ${feedbackClass} ${guardianProtectionEnabled ? 'protection-active' : ''}`} key={feedbackKey} style={{ '--tier-progress': `${tierProgress}%`, '--flame-scale': flameScale, '--flame-burst-scale': flameScale * 1.28, '--flame-dip-scale': flameScale * 0.9, '--crown-scale': crownScale, '--crown-entry-scale': crownScale * 0.82, '--crown-burst-scale': crownScale * 1.2, '--catalyst-scale': catalystScale, '--crystal-scale': crystalScale, '--harmony-scale': harmonyScale, '--talisman-scale': talismanScale, '--compass-scale': compassScale, '--moon-scale': moonScale, '--ascension-scale': ascensionScale, '--spirit-scale': spiritScale, '--mophone-scale': mophoneScale } as CSSProperties}>
             <div className="altar-glow" />
-            {item.mode !== 'draw' && <div className="level-route"><div className="level-focus"><span>当前等级</span><b>{levelLabel(level)}</b></div><div className="level-steps" aria-label="强化等级进度">{Array.from({ length: maxSelectable - (item.minLevel ?? 0) + 1 }, (_, index) => (item.minLevel ?? 0) + index).map((step) => <span key={step} className={`${step === level ? 'current' : step < level ? 'done' : ''} ${isCheckpointLevel(item.id, step) ? 'checkpoint' : ''}`} aria-current={step === level ? 'step' : undefined} title={isCheckpointLevel(item.id, step) ? item.mode === 'adaptive' ? `${step} 星保级点` : `+${step} 保级点` : undefined} style={{ '--step-color': levelPalette(item, step).accent } as CSSProperties}><i /><b>{step}</b></span>)}</div></div>}
+            {item.mode !== 'draw' && <div className="level-route"><div className="level-focus"><span>当前等级</span><b>{levelLabel(level)}</b>{itemQuantity > 1 && <em className="current-instance">{item.name} · {String(itemInstanceNumber).padStart(2, '0')} / {String(itemQuantity).padStart(2, '0')}</em>}</div><div className="level-steps" aria-label={`${item.name}${itemQuantity > 1 ? `${itemInstanceNumber}号` : ''}强化等级进度`}>{Array.from({ length: maxSelectable - (item.minLevel ?? 0) + 1 }, (_, index) => (item.minLevel ?? 0) + index).map((step) => <span key={step} className={`${step === level ? 'current' : step < level ? 'done' : ''} ${isCheckpointLevel(item.id, step) ? 'checkpoint' : ''}`} aria-current={step === level ? 'step' : undefined} title={isCheckpointLevel(item.id, step) ? item.mode === 'adaptive' ? `${step} 星保级点` : `+${step} 保级点` : undefined} style={{ '--step-color': levelPalette(item, step).accent } as CSSProperties}><i /><b>{step}</b></span>)}</div></div>}
             <div className={`effect-stage tier-${tier}`}>
               <div className="effect-visual">
                 {item.id === 'burning-gem' ? (
@@ -1257,7 +1353,7 @@ export default function Home() {
               {item.mode !== 'draw' && <b className="artifact-level">{levelName}</b>}
               <small className="rite-name">{effectProfile.rite}</small>
             </div>
-            <div className="artifact-name"><span>{item.mode === 'draw' ? '等待唤醒' : canForge ? `${tierNames[tier]}境 · 等待强化` : '已臻至最高境界'}</span><h3>{item.name}{itemQuantity > 1 ? ` ×${itemQuantity}` : ''}</h3><div className="evolution-track" aria-label={`成长进度 ${tierProgress}%`}>{Array.from({ length: 6 }, (_, index) => <i key={index} className={index <= tier ? 'lit' : ''} />)}</div></div>
+            <div className="artifact-name"><span>{item.mode === 'draw' ? '等待唤醒' : canForge ? `${tierNames[tier]}境 · 等待强化` : '已臻至最高境界'}</span><h3>{item.name}{itemQuantity > 1 && <i className="active-instance-mark">{itemInstanceNumber}号</i>}</h3><div className="evolution-track" aria-label={`成长进度 ${tierProgress}%`}>{Array.from({ length: 6 }, (_, index) => <i key={index} className={index <= tier ? 'lit' : ''} />)}</div></div>
             {item.mode === 'adaptive' && <label className="star-memory"><span>星辰共鸣次数</span><input type="number" min="1" max="9999" value={attemptCount} onChange={(event) => setAttemptCount(Math.max(1, Number(event.target.value) || 1))} /><small>第 {bandIndex(attemptCount) + 1} 阶共鸣</small></label>}
             {item.id === 'guardian-star' && <button type="button" className={`guardian-protection ${guardianProtection ? 'active' : ''}`} aria-pressed={guardianProtection} onClick={() => setGuardianProtection((enabled) => !enabled)} disabled={!canForge}><i>✧</i><span><b>失败保护</b><small>{guardianProtection ? '已开启 · +¥8 / 次' : '¥8 / 次 · 点击开启'}</small></span></button>}
             <div className={`altar-actions ${autoTargetLimit !== null ? 'has-target-runner' : 'single-only'}`}>
@@ -1274,7 +1370,7 @@ export default function Home() {
                       aria-label={`${item.name}自动强化目标等级`}
                       onChange={(event) => {
                         const nextTarget = Math.min(autoTargetLimit, Math.max(1, Math.floor(Number(event.target.value) || 1)));
-                        setTargetLevels((current) => ({ ...current, [item.id]: nextTarget }));
+                        setTargetLevels((current) => ({ ...current, [itemKey]: nextTarget }));
                       }}
                     />
                     <span>停止</span>
@@ -1285,7 +1381,7 @@ export default function Home() {
                 </div>
               )}
               <button type="button" className="primary-action" onClick={() => simulate(1)} disabled={isRolling || !canForge || isAutoTargetRunning}>
-                <span>{isAutoTargetRunning ? `自动强化中 · ¥${attemptUnitCost?.toFixed(0) ?? '—'} / 0.2 秒${quantityCostLabel}` : isRolling ? '强化中…' : canForge ? attemptUnitCost !== null ? `${actionLabel} · ¥${attemptUnitCost.toFixed(0)}${quantityCostLabel}` : actionLabel : '已经毕业'}</span>
+                <span>{isAutoTargetRunning ? `自动强化中 · ¥${attemptUnitCost?.toFixed(0) ?? '—'} / 0.2 秒` : isRolling ? '强化中…' : canForge ? attemptUnitCost !== null ? `${actionLabel} · ¥${attemptUnitCost.toFixed(0)}` : actionLabel : '已经毕业'}</span>
               </button>
             </div>
           </div>
@@ -1306,8 +1402,8 @@ export default function Home() {
 
         <aside className="session-panel">
           <div className="session-heading"><div><span>极品号账本</span><b>BUILD COST LEDGER</b></div><button type="button" onClick={restartSession} disabled={!hasHydrated}>重新计算</button></div>
-          <div className="budget-total"><button type="button" className="budget-detail-trigger" onClick={() => setCostDetailsOpen(true)} disabled={!hasHydrated}><span>已录入规则累计花费 <i>查看逐项明细</i></span><strong>¥{costLedger.knownSpend.toFixed(2)}</strong></button><p>宝石 3 · 王冠 5 · 圣杯 2 · 护符 2 · 罗盘 5 · 元神 5 · Mophone 8 · 万象图 8 · 守护星 2（保护 +8）；升级合计：水晶球 15（3 × 5）· 星月 25（5 × 5）· 圣之赐 25（5 × 5）· 命运女神 24（8 × 3）· 耳环 16（8 × 2）</p></div>
-          <div className="account-progress"><div><span>账号完成度</span><b>{accountProgress}%</b></div><i><i style={{ width: `${accountProgress}%` }} /></i><small>{completedItems} / {items.length} 项达到目标</small></div>
+          <div className="budget-total"><button type="button" className="budget-detail-trigger" onClick={() => setCostDetailsOpen(true)} disabled={!hasHydrated}><span>已录入规则累计花费 <i>查看逐件明细</i></span><strong>¥{costLedger.knownSpend.toFixed(2)}</strong></button><p>多件装备已拆分单独强化：水晶球 5 件 · 星月神话 5 件 · 圣之赐 5 件 · 命运女神 3 件 · 耳环 2 件；每次只为当前选中的一件计费。</p></div>
+          <div className="account-progress"><div><span>账号完成度</span><b>{accountProgress}%</b></div><i><i style={{ width: `${accountProgress}%` }} /></i><small>{completedItems} / {itemInstances.length} 件达到目标</small></div>
           <div className="stat-grid"><div><span>强化次数</span><b>{totals.total}</b></div><div><span>成功</span><b>{totals.success}</b></div><div><span>失败</span><b>{totals.risk}</b></div></div>
           <div className="rule-roadmap"><h3>成本规则进度</h3><div className="done"><i>✓</i><span><b>升级概率</b><small>已录入官方公示</small></span></div><div className="done"><i>✓</i><span><b>{Object.keys(costRules).length} 项核心道具已计价</b><small>守护星 ¥2 / 次 · 可选保护 +¥8</small></span></div><div><i>3</i><span><b>其余 {items.length - Object.keys(costRules).length} 项成本</b><small>已计价 {costLedger.pricedAttempts} 次 · 等待共同完善</small></span></div></div>
           <div className="log-heading"><span>最近强化</span><i>{attempts.length} 次</i></div>
@@ -1329,20 +1425,18 @@ export default function Home() {
               <div><small>BUILD COST LEDGER</small><h2 id="cost-detail-title">强化花费明细</h2></div>
               <button type="button" onClick={() => setCostDetailsOpen(false)} aria-label="关闭花费明细">×</button>
             </header>
-            <div className="cost-detail-summary"><span>全部累计花费</span><strong>¥{costLedger.knownSpend.toFixed(2)}</strong><small>{costDetailItems.length} 个强化项目 · 本地实时记录</small></div>
+            <div className="cost-detail-summary"><span>全部累计花费</span><strong>¥{costLedger.knownSpend.toFixed(2)}</strong><small>{costDetailItems.length} 件装备 · 每件独立记录</small></div>
             <div className="cost-detail-list">
               {costDetailItems.map((entry) => (
                 <article key={entry.id}>
                   <div>
-                    <b>{entry.name}{entry.quantity > 1 ? ` ×${entry.quantity}` : ''}</b>
+                    <b>{entry.name}</b>
                     <small>
                       {entry.level} · {entry.attemptCost === null
                         ? '未计价'
-                        : entry.id === 'guardian-star'
+                        : entry.baseItemId === 'guardian-star'
                           ? '¥2 / 次 · 保护时 ¥10 / 次'
-                          : entry.quantity > 1
-                            ? `¥${entry.attemptCost.toFixed(0)} / 次（¥${entry.unitCost?.toFixed(0)} × ${entry.quantity}）`
-                            : `¥${entry.attemptCost.toFixed(0)} / 次`}
+                          : `¥${entry.attemptCost.toFixed(0)} / 次`}
                     </small>
                   </div>
                   <strong>¥{entry.spend.toFixed(2)}</strong>
