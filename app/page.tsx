@@ -326,7 +326,7 @@ function checkpointRows(start: number, rates: number[], checkpoints: number[]): 
 
 function isCheckpointLevel(itemId: string, level: number) {
   if (itemId === 'holy-gift') return [2, 4, 6, 8].includes(level);
-  if (itemId === 'earring') return [4, 6, 8, 10, 12, 14].includes(level);
+  if (itemId === 'earring') return [4, 6, 8, 10, 13].includes(level);
   if (itemId === 'goddess-fate' || itemId === 'mophone' || itemId === 'wanxiang') return [4, 6, 8].includes(level);
   if (itemId === 'mystic-talisman' || itemId === 'primordial-spirit') return [3, 6, 9].includes(level);
   return false;
@@ -436,8 +436,8 @@ const items: ProbabilityItem[] = [
   },
   {
     id: 'earring', name: '耳环', category: '装备升阶', mode: 'upgrade', symbol: '◌', accent: '#cb9bff', accentSoft: '#312047',
-    description: '共 2 个，每次升级合计 ¥16（¥8 × 2），+4、+6、+8、+10、+12、+14 为保级点。', sourceNote: '失败时回落到最近保级点，不会跌破已经达到的保级等级。', minLevel: 0, maxLevel: 15,
-    rows: checkpointRows(0, [100, 100, 100, 100, 25, 25, 70, 50, 20, 5, 100, 50, 30, 20, 5], [0, 4, 6, 8, 10, 12, 14]),
+    description: '共 2 个，每次升级合计 ¥16（¥8 × 2），+4、+6、+8、+10、+13 为保级点。', sourceNote: '失败时回落到最近保级点，不会跌破已经达到的保级等级。', minLevel: 0, maxLevel: 15,
+    rows: checkpointRows(0, [100, 100, 100, 100, 25, 25, 70, 50, 20, 5, 100, 50, 30, 20, 5], [0, 4, 6, 8, 10, 13]),
   },
   {
     id: 'wanxiang', name: '万象图', category: '星级系统', mode: 'adaptive', symbol: '◎', accent: '#f8c55c', accentSoft: '#453417',
@@ -1204,7 +1204,7 @@ export default function Home() {
                   </>
                 ) : item.id === 'earring' ? (
                   <>
-                    <div className="earring-relic-art" role="img" aria-label="六枚保级宝石环绕的月银双耳环">
+                    <div className="earring-relic-art" role="img" aria-label="五枚保级宝石环绕的月银双耳环">
                       <div className="earring-aura"><i /><i /><i /></div>
                       <div className="relic-earring left">
                         <span className="earring-hook" />
@@ -1220,7 +1220,7 @@ export default function Home() {
                       </div>
                       <b className="earring-resonance">✦</b>
                       <div className="earring-seals">
-                        {[4, 6, 8, 10, 12, 14].map((checkpoint) => <i key={checkpoint} className={level >= checkpoint ? 'unlocked' : ''}>{checkpoint}</i>)}
+                        {[4, 6, 8, 10, 13].map((checkpoint) => <i key={checkpoint} className={level >= checkpoint ? 'unlocked' : ''}>{checkpoint}</i>)}
                       </div>
                     </div>
                     <div className="effect-particles earring-motes">{Array.from({ length: 16 }, (_, index) => <i key={index} />)}</div>
