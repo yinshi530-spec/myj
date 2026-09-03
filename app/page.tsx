@@ -328,7 +328,7 @@ function isCheckpointLevel(itemId: string, level: number) {
   if (itemId === 'holy-gift') return [2, 4, 6, 8].includes(level);
   if (itemId === 'earring') return [4, 6, 8, 10, 12, 14].includes(level);
   if (itemId === 'goddess-fate' || itemId === 'mophone' || itemId === 'wanxiang') return [4, 6, 8].includes(level);
-  if (itemId === 'mystic-talisman' || itemId === 'harmony-cup' || itemId === 'primordial-spirit') return [3, 6, 9].includes(level);
+  if (itemId === 'mystic-talisman' || itemId === 'primordial-spirit') return [3, 6, 9].includes(level);
   return false;
 }
 
@@ -392,8 +392,8 @@ const items: ProbabilityItem[] = [
   },
   {
     id: 'harmony-cup', name: '和谐圣杯', aliases: ['圣杯之环'], category: '宝石与圣器', mode: 'upgrade', symbol: '♜', accent: '#f3bd63', accentSoft: '#3b2b17',
-    description: '+3、+6、+9 为保级点，失败回到最近保级等级。', sourceNote: '成功率沿用公示；失败回退规则按当前 Mock 设定。', minLevel: 1, maxLevel: 10,
-    rows: checkpointRows(1, [100, 85, 70, 55, 40, 25, 15, 5, 1], [1, 3, 6, 9]),
+    description: '强化失败时保持当前等级，不会掉级。', sourceNote: '成功率沿用公示；失败结果统一为保持当前等级。', minLevel: 1, maxLevel: 10,
+    rows: stayRows(1, [100, 85, 70, 55, 40, 25, 15, 5, 1]),
   },
   {
     id: 'mystic-talisman', name: '神秘护符', category: '宝石与圣器', mode: 'upgrade', symbol: '✦', accent: '#5ddbb0', accentSoft: '#163c35',
