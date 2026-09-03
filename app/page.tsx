@@ -102,6 +102,7 @@ type ItemInstance = {
   item: ProbabilityItem;
   index: number;
   quantity: number;
+  nickname: string;
 };
 
 const sessionStorageKey = 'myj-forge-session-v1';
@@ -113,6 +114,14 @@ const itemQuantities: Record<string, number> = {
   'holy-gift': 5,
   'goddess-fate': 3,
   earring: 2,
+};
+
+const itemInstanceNames: Record<string, string[]> = {
+  'crystal-ball': ['天青珠', '绯霞珠', '碧海珠', '紫宸珠', '曦金珠'],
+  'moon-myth': ['金', '木', '水', '火', '土'],
+  'holy-gift': ['青龙赐', '白虎赐', '朱雀赐', '玄武赐', '麒麟赐'],
+  'goddess-fate': ['往昔', '今朝', '未来'],
+  earring: ['玉凤环', '金凰环'],
 };
 
 function itemInstanceId(itemId: string, index = 0) {
@@ -475,8 +484,13 @@ const itemInstances: ItemInstance[] = items.flatMap((item) => {
     item,
     index,
     quantity,
+    nickname: itemInstanceNames[item.id]?.[index] ?? `${index + 1}号`,
   }));
 });
+
+function itemInstanceName(instance: ItemInstance) {
+  return instance.quantity > 1 ? `${instance.item.name} · ${instance.nickname}` : instance.item.name;
+}
 
 const autoTargetInstanceLimits: Record<string, number> = Object.fromEntries(
   itemInstances
@@ -771,7 +785,7 @@ export default function Home() {
     return {
       id: instance.id,
       baseItemId: entry.id,
-      name: instance.quantity > 1 ? `${entry.name} · ${instance.index + 1}号` : entry.name,
+      name: itemInstanceName(instance),
       level: entry.mode === 'adaptive' ? `${currentLevel}★` : `+${currentLevel}`,
       unitCost,
       attemptCost: unitCost,
@@ -803,7 +817,7 @@ export default function Home() {
     setResultFeedbacks([]);
   }
 
-  function createAttempt(activeItem: ProbabilityItem, activeItemKey: string, activeInstanceNumber: number, currentLevel: number, count: number, sequence: number) {
+  function createAttempt(activeItem: ProbabilityItem, activeItemKey: string, activeInstanceName: string, currentLevel: number, count: number, sequence: number) {
     let available: Outcome[] = [];
     let fromLabel = activeItem.mode === 'draw' ? '触发' : `+${currentLevel}`;
 
@@ -837,11 +851,10 @@ export default function Home() {
     const protectionTriggered = protectionEnabled && (picked.kind === 'down' || picked.kind === 'fail');
     const nextLevel = protectionTriggered ? currentLevel : picked.target ?? currentLevel;
     const baseCost = costRules[activeItem.id];
-    const itemQuantity = itemQuantities[activeItem.id] ?? 1;
     const attempt: Attempt = {
       id: Date.now() + sequence,
       itemId: activeItemKey,
-      itemName: `${activeItem.name}${itemQuantity > 1 ? ` · ${activeInstanceNumber}号` : ''}`,
+      itemName: activeInstanceName,
       fromLabel,
       resultLabel: protectionTriggered ? '保护生效 · 保持等级' : picked.label,
       toLabel: activeItem.mode === 'draw' ? picked.label : activeItem.mode === 'adaptive' ? `${nextLevel} 星` : `+${nextLevel}`,
@@ -859,7 +872,7 @@ export default function Home() {
     let currentCount = attemptCount;
     const generated: Attempt[] = [];
     for (let index = 0; index < times; index += 1) {
-      const result = createAttempt(item, itemKey, itemInstanceNumber, currentLevel, currentCount, index);
+      const result = createAttempt(item, itemKey, itemInstanceName(selectedInstance), currentLevel, currentCount, index);
       if (!result) break;
       generated.push(result.attempt);
       if (item.mode === 'upgrade' || item.mode === 'adaptive') currentLevel = result.nextLevel;
@@ -1113,17 +1126,20 @@ export default function Home() {
                     <span><b>{entry.name}</b><small>{instances.length} 件独立培养 · ¥{costRules[entry.id] ?? '—'} / 件次</small></span>
                     <em>{completedCopies}/{instances.length}</em>
                   </header>
-                  <div className="item-copy-grid" role="group" aria-label={`选择${entry.name}编号`}>
+                  <div className="item-copy-grid" role="group" aria-label={`选择${entry.name}`}>
                     {instances.map((instance) => {
                       const instanceLevel = levels[instance.id] ?? entry.minLevel ?? 0;
                       const progress = Math.round(((instanceLevel - (entry.minLevel ?? 0)) / Math.max(1, (entry.maxLevel ?? 1) - (entry.minLevel ?? 0))) * 100);
+                      const instanceTier = visualTier(entry, instanceLevel);
+                      const instancePalette = levelPalette(entry, instanceLevel);
                       const isComplete = instanceLevel >= (entry.maxLevel ?? 1);
                       const isActive = instance.id === itemKey;
                       return (
-                        <button key={instance.id} type="button" className={`${isActive ? 'active' : ''} ${isComplete ? 'complete' : ''}`} onClick={() => chooseItem(instance)} aria-pressed={isActive} title={`${entry.name} ${instance.index + 1}号，当前 +${instanceLevel}`}>
-                          <span>{String(instance.index + 1).padStart(2, '0')}</span>
-                          <b>{entry.mode === 'adaptive' ? `${instanceLevel}★` : `+${instanceLevel}`}</b>
-                          <i><i style={{ width: `${progress}%` }} /></i>
+                        <button key={instance.id} type="button" className={`tier-${instanceTier} ${isActive ? 'active' : ''} ${isComplete ? 'complete' : ''}`} style={{ '--copy-accent': instancePalette.accent, '--copy-soft': instancePalette.soft } as CSSProperties} onClick={() => chooseItem(instance)} aria-pressed={isActive} aria-label={`${itemInstanceName(instance)}，当前 ${entry.mode === 'adaptive' ? `${instanceLevel}星` : `加${instanceLevel}`}`} title={`${itemInstanceName(instance)}，当前 +${instanceLevel}`}>
+                          <span className="copy-index"><b>{instance.nickname}</b><i>{String(instance.index + 1).padStart(2, '0')}</i></span>
+                          <span className="copy-relic" aria-hidden="true"><i /><b>{entry.symbol}</b></span>
+                          <span className="copy-meta"><strong>{entry.mode === 'adaptive' ? `${instanceLevel}★` : `+${instanceLevel}`}</strong><small>{isActive ? '当前强化' : isComplete ? '已经毕业' : tierNames[instanceTier]}</small></span>
+                          <em className="copy-meter"><i style={{ width: `${progress}%` }} /></em>
                         </button>
                       );
                     })}
@@ -1137,7 +1153,7 @@ export default function Home() {
         <section className="forge-stage">
           <div className={`forge-chamber fx-${effectProfile.effect} tier-${tier} ${feedbackClass} ${guardianProtectionEnabled ? 'protection-active' : ''}`} key={feedbackKey} style={{ '--tier-progress': `${tierProgress}%`, '--flame-scale': flameScale, '--flame-burst-scale': flameScale * 1.28, '--flame-dip-scale': flameScale * 0.9, '--crown-scale': crownScale, '--crown-entry-scale': crownScale * 0.82, '--crown-burst-scale': crownScale * 1.2, '--catalyst-scale': catalystScale, '--crystal-scale': crystalScale, '--harmony-scale': harmonyScale, '--talisman-scale': talismanScale, '--compass-scale': compassScale, '--moon-scale': moonScale, '--ascension-scale': ascensionScale, '--spirit-scale': spiritScale, '--mophone-scale': mophoneScale } as CSSProperties}>
             <div className="altar-glow" />
-            {item.mode !== 'draw' && <div className="level-route"><div className="level-focus"><span>当前等级</span><b>{levelLabel(level)}</b>{itemQuantity > 1 && <em className="current-instance">{item.name} · {String(itemInstanceNumber).padStart(2, '0')} / {String(itemQuantity).padStart(2, '0')}</em>}</div><div className="level-steps" aria-label={`${item.name}${itemQuantity > 1 ? `${itemInstanceNumber}号` : ''}强化等级进度`}>{Array.from({ length: maxSelectable - (item.minLevel ?? 0) + 1 }, (_, index) => (item.minLevel ?? 0) + index).map((step) => <span key={step} className={`${step === level ? 'current' : step < level ? 'done' : ''} ${isCheckpointLevel(item.id, step) ? 'checkpoint' : ''}`} aria-current={step === level ? 'step' : undefined} title={isCheckpointLevel(item.id, step) ? item.mode === 'adaptive' ? `${step} 星保级点` : `+${step} 保级点` : undefined} style={{ '--step-color': levelPalette(item, step).accent } as CSSProperties}><i /><b>{step}</b></span>)}</div></div>}
+            {item.mode !== 'draw' && <div className="level-route"><div className="level-focus"><span>当前等级</span><b>{levelLabel(level)}</b>{itemQuantity > 1 && <em className="current-instance">{selectedInstance.nickname} · {String(itemInstanceNumber).padStart(2, '0')} / {String(itemQuantity).padStart(2, '0')}</em>}</div><div className="level-steps" aria-label={`${itemInstanceName(selectedInstance)}强化等级进度`}>{Array.from({ length: maxSelectable - (item.minLevel ?? 0) + 1 }, (_, index) => (item.minLevel ?? 0) + index).map((step) => <span key={step} className={`${step === level ? 'current' : step < level ? 'done' : ''} ${isCheckpointLevel(item.id, step) ? 'checkpoint' : ''}`} aria-current={step === level ? 'step' : undefined} title={isCheckpointLevel(item.id, step) ? item.mode === 'adaptive' ? `${step} 星保级点` : `+${step} 保级点` : undefined} style={{ '--step-color': levelPalette(item, step).accent } as CSSProperties}><i /><b>{step}</b></span>)}</div></div>}
             <div className={`effect-stage tier-${tier}`}>
               <div className="effect-visual">
                 {item.id === 'burning-gem' ? (
@@ -1353,7 +1369,7 @@ export default function Home() {
               {item.mode !== 'draw' && <b className="artifact-level">{levelName}</b>}
               <small className="rite-name">{effectProfile.rite}</small>
             </div>
-            <div className="artifact-name"><span>{item.mode === 'draw' ? '等待唤醒' : canForge ? `${tierNames[tier]}境 · 等待强化` : '已臻至最高境界'}</span><h3>{item.name}{itemQuantity > 1 && <i className="active-instance-mark">{itemInstanceNumber}号</i>}</h3><div className="evolution-track" aria-label={`成长进度 ${tierProgress}%`}>{Array.from({ length: 6 }, (_, index) => <i key={index} className={index <= tier ? 'lit' : ''} />)}</div></div>
+            <div className="artifact-name"><span>{item.mode === 'draw' ? '等待唤醒' : canForge ? `${tierNames[tier]}境 · 等待强化` : '已臻至最高境界'}</span><h3>{item.name}{itemQuantity > 1 && <i className="active-instance-mark">{selectedInstance.nickname}</i>}</h3><div className="evolution-track" aria-label={`成长进度 ${tierProgress}%`}>{Array.from({ length: 6 }, (_, index) => <i key={index} className={index <= tier ? 'lit' : ''} />)}</div></div>
             {item.mode === 'adaptive' && <label className="star-memory"><span>星辰共鸣次数</span><input type="number" min="1" max="9999" value={attemptCount} onChange={(event) => setAttemptCount(Math.max(1, Number(event.target.value) || 1))} /><small>第 {bandIndex(attemptCount) + 1} 阶共鸣</small></label>}
             {item.id === 'guardian-star' && <button type="button" className={`guardian-protection ${guardianProtection ? 'active' : ''}`} aria-pressed={guardianProtection} onClick={() => setGuardianProtection((enabled) => !enabled)} disabled={!canForge}><i>✧</i><span><b>失败保护</b><small>{guardianProtection ? '已开启 · +¥8 / 次' : '¥8 / 次 · 点击开启'}</small></span></button>}
             <div className={`altar-actions ${autoTargetLimit !== null ? 'has-target-runner' : 'single-only'}`}>
