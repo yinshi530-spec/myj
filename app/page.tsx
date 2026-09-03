@@ -126,7 +126,8 @@ type GuardianHistoryEntry = {
   slotId: number;
   skillId: string;
   previousSkillId: string | null;
-  mode: 'single' | 'all';
+  mode: 'single' | 'all' | 'until-five';
+  batchAttempts?: number;
 };
 
 const sessionStorageKey = 'myj-forge-session-v1';
@@ -751,6 +752,9 @@ export default function Home() {
   const [guardianSlots, setGuardianSlots] = useState<GuardianSlot[]>(initialGuardianSlots);
   const [guardianHistory, setGuardianHistory] = useState<GuardianHistoryEntry[]>([]);
   const [guardianLatestSlot, setGuardianLatestSlot] = useState<number | null>(null);
+  const [guardianAutoSlotId, setGuardianAutoSlotId] = useState<number | null>(null);
+  const guardianAutoTimer = useRef<number | null>(null);
+  const guardianAutoTick = useRef<(slotId: number) => void>(() => undefined);
   const graduationPosterFile = useRef<File | null>(null);
   const posterBuildSequence = useRef(0);
 
@@ -879,7 +883,7 @@ export default function Home() {
           && guardianSkillById.has(entry.skillId)
           && (entry.previousSkillId === null || (typeof entry.previousSkillId === 'string' && guardianSkillById.has(entry.previousSkillId))))
           .slice(0, 40)
-          .map((entry) => ({ ...entry, mode: entry.mode === 'all' ? 'all' : 'single' })));
+          .map((entry) => ({ ...entry, mode: entry.mode === 'all' || entry.mode === 'until-five' ? entry.mode : 'single' })));
       }
     } catch (error) {
       console.warn('守护技能进度恢复失败:', error);
@@ -967,6 +971,7 @@ export default function Home() {
   useEffect(() => () => {
     if (pendingForgeTimer.current !== null) window.clearTimeout(pendingForgeTimer.current);
     if (autoTargetTimer.current !== null) window.clearTimeout(autoTargetTimer.current);
+    if (guardianAutoTimer.current !== null) window.clearTimeout(guardianAutoTimer.current);
     if (fundNoticeTimer.current !== null) window.clearTimeout(fundNoticeTimer.current);
   }, []);
 
@@ -1350,21 +1355,21 @@ export default function Home() {
     void navigator.clipboard?.writeText(shareText).then(() => setPosterStatus('shared')).catch(() => setPosterStatus('error'));
   }
 
-  function refreshGuardianSlot(slotId: number) {
+  function performGuardianSlotRefresh(slotId: number, mode: 'single' | 'until-five') {
     const otherGroupCounts = guardianResolvedSlots.reduce<Record<string, number>>((counts, slot) => {
       if (slot.id !== slotId && slot.skill) counts[slot.skill.groupId] = (counts[slot.skill.groupId] ?? 0) + 1;
       return counts;
     }, {});
     const nextSkill = pickGuardianSkill(otherGroupCounts);
-    if (!nextSkill) return;
-    if (!spendFromFund(5)) return;
+    if (!nextSkill || !spendFromFund(5)) return null;
     const previousSkillId = guardianSlots.find((slot) => slot.id === slotId)?.skillId ?? null;
     const historyEntry: GuardianHistoryEntry = {
       id: (Date.now() * 10) + slotId,
       slotId,
       skillId: nextSkill.id,
       previousSkillId,
-      mode: 'single',
+      mode,
+      batchAttempts: 1,
     };
     setGuardianSlots((current) => current.map((slot) => slot.id === slotId
       ? { ...slot, skillId: nextSkill.id, refreshes: slot.refreshes + 1 }
@@ -1379,9 +1384,75 @@ export default function Home() {
         [`guardian-skill:${slotId}`]: (current.itemSpend[`guardian-skill:${slotId}`] ?? 0) + 5,
       },
     }));
+    return nextSkill;
   }
 
+  function refreshGuardianSlot(slotId: number) {
+    if (guardianAutoSlotId !== null) return;
+    performGuardianSlotRefresh(slotId, 'single');
+  }
+
+  function stopGuardianAutoRefresh() {
+    if (guardianAutoTimer.current !== null) {
+      window.clearTimeout(guardianAutoTimer.current);
+      guardianAutoTimer.current = null;
+    }
+    setGuardianAutoSlotId(null);
+  }
+
+  function toggleGuardianAutoRefresh(slotId: number) {
+    if (guardianAutoSlotId === slotId) {
+      stopGuardianAutoRefresh();
+      showFundNotice('已停止追逐橙卡');
+      return;
+    }
+    if (guardianAutoSlotId !== null) return;
+    const currentSlot = guardianResolvedSlots.find((slot) => slot.id === slotId);
+    if (currentSlot?.skill?.level === 5) return;
+    if (!fundHasHydrated || fundBalanceRef.current < 5) {
+      showFundNotice('资金不足，无法追逐橙卡');
+      return;
+    }
+    setGuardianAutoSlotId(slotId);
+    const firstSkill = performGuardianSlotRefresh(slotId, 'until-five');
+    if (!firstSkill || firstSkill.level === 5) {
+      setGuardianAutoSlotId(null);
+      if (firstSkill?.level === 5) showFundNotice(`追到橙卡 · ${firstSkill.name}`);
+    }
+  }
+
+  guardianAutoTick.current = (slotId: number) => {
+    const nextSkill = performGuardianSlotRefresh(slotId, 'until-five');
+    if (!nextSkill || nextSkill.level === 5) {
+      stopGuardianAutoRefresh();
+      if (nextSkill?.level === 5) showFundNotice(`追到橙卡 · ${nextSkill.name}`);
+    }
+  };
+
+  useEffect(() => {
+    if (guardianAutoSlotId === null) return;
+    const activeSlotId = guardianAutoSlotId;
+    const currentSlot = guardianSlots.find((slot) => slot.id === activeSlotId);
+    const currentSkill = currentSlot?.skillId ? guardianSkillById.get(currentSlot.skillId) : null;
+    if (currentSkill?.level === 5 || fundBalance < 5) {
+      setGuardianAutoSlotId(null);
+      if (fundBalance < 5) showFundNotice('资金不足，追橙已停止');
+      return;
+    }
+    guardianAutoTimer.current = window.setTimeout(() => {
+      guardianAutoTimer.current = null;
+      guardianAutoTick.current(activeSlotId);
+    }, 300);
+    return () => {
+      if (guardianAutoTimer.current !== null) {
+        window.clearTimeout(guardianAutoTimer.current);
+        guardianAutoTimer.current = null;
+      }
+    };
+  }, [fundBalance, guardianAutoSlotId, guardianSlots]);
+
   function refreshAllGuardianSlots() {
+    if (guardianAutoSlotId !== null) return;
     const nextGroupCounts: Record<string, number> = {};
     const timestamp = Date.now() * 10;
     const nextHistory: GuardianHistoryEntry[] = [];
@@ -1419,6 +1490,7 @@ export default function Home() {
 
   function restartSession() {
     stopAutoTargetRun();
+    stopGuardianAutoRefresh();
     if (pendingForgeTimer.current !== null) {
       window.clearTimeout(pendingForgeTimer.current);
       pendingForgeTimer.current = null;
@@ -1493,7 +1565,7 @@ export default function Home() {
     <main className={`game-forge ${activeSystem === 'guardian' ? 'guardian-system-active' : ''} ${isRolling ? 'is-forging' : ''}`} style={pageTheme}>
       <header className="game-hud compact-hud cost-hud">
         <nav className="system-tabs" aria-label="养成系统">
-          <button type="button" className={activeSystem === 'forge' ? 'active' : ''} onClick={() => setActiveSystem('forge')}><i>◇</i><span>装备打造</span></button>
+          <button type="button" className={activeSystem === 'forge' ? 'active' : ''} onClick={() => { stopGuardianAutoRefresh(); setActiveSystem('forge'); }}><i>◇</i><span>装备打造</span></button>
           <button type="button" className={activeSystem === 'guardian' ? 'active' : ''} onClick={() => setActiveSystem('guardian')}><i>守</i><span>守护技能</span></button>
         </nav>
         <div className="hud-cost-only">
@@ -1871,7 +1943,7 @@ export default function Home() {
             <div><small>GUARDIAN INHERENT SKILLS</small><h2>守护天生技能</h2><p>单刷固定当前席位；四席全刷后按等级从高到低排列。</p></div>
             <div className="guardian-price-group">
               <div className="guardian-price"><span>单席刷新</span><b>¥5</b><small>只替换当前席位</small></div>
-              <button type="button" className="guardian-refresh-all" onClick={refreshAllGuardianSlots} disabled={!hasHydrated || !fundHasHydrated || fundBalance < 1} title={fundBalance < 1 ? '资金不足，等待整点刷新' : '一次生成四项'}><span>四席全部刷新</span><b>¥1</b><small>{fundBalance < 1 ? '资金不足' : '一次生成四项'}</small></button>
+              <button type="button" className="guardian-refresh-all" onClick={refreshAllGuardianSlots} disabled={!hasHydrated || !fundHasHydrated || fundBalance < 1 || guardianAutoSlotId !== null} title={guardianAutoSlotId !== null ? '请先停止当前追橙' : fundBalance < 1 ? '资金不足，等待整点刷新' : '一次生成四项'}><span>四席全部刷新</span><b>¥1</b><small>{guardianAutoSlotId !== null ? '追橙进行中' : fundBalance < 1 ? '资金不足' : '一次生成四项'}</small></button>
             </div>
           </header>
           <div className="guardian-formation">
@@ -1881,7 +1953,7 @@ export default function Home() {
               const rankColor = skill ? guardianRankColors[skill.level - 1] : '#615e56';
               const groupCount = skill ? equippedGuardianGroups[skill.groupId] ?? 0 : 0;
               return (
-                <article key={`${slot.id}-${slot.refreshes}`} className={`guardian-skill-slot ${skill ? `rank-${skill.level}` : 'empty'} ${guardianLatestSlot === slot.id || guardianLatestSlot === 0 ? 'latest' : ''}`} style={{ '--skill-accent': skill?.accent ?? '#777066', '--rank-color': rankColor } as CSSProperties}>
+                <article key={`${slot.id}-${slot.refreshes}`} className={`guardian-skill-slot ${skill ? `rank-${skill.level}` : 'empty'} ${guardianLatestSlot === slot.id || guardianLatestSlot === 0 ? 'latest' : ''} ${guardianAutoSlotId === slot.id ? 'auto-refreshing' : ''}`} style={{ '--skill-accent': skill?.accent ?? '#777066', '--rank-color': rankColor } as CSSProperties}>
                   <header><span>技能席位 {String(slot.id).padStart(2, '0')}</span><div>{skill && <b>{guardianRankNames[skill.level - 1]}</b>}<i>{slot.refreshes} 次刷新</i></div></header>
                   {skill ? (
                     <div className="guardian-skill-current">
@@ -1891,7 +1963,10 @@ export default function Home() {
                   ) : (
                     <div className="guardian-skill-empty"><span>◇</span><b>等待技能显现</b><small>首次刷新将从完整技能池抽取</small></div>
                   )}
-                  <button type="button" onClick={() => refreshGuardianSlot(slot.id)} disabled={!hasHydrated || !fundHasHydrated || fundBalance < 5} title={fundBalance < 5 ? '资金不足，等待整点刷新' : undefined}><span>{fundBalance < 5 ? '资金不足' : skill ? '刷新此席' : '唤醒此席'}</span><b>¥5</b></button>
+                  <div className="guardian-slot-actions">
+                    <button type="button" className="guardian-refresh-once" onClick={() => refreshGuardianSlot(slot.id)} disabled={!hasHydrated || !fundHasHydrated || fundBalance < 5 || guardianAutoSlotId !== null} title={guardianAutoSlotId !== null ? '请先停止当前追橙' : fundBalance < 5 ? '资金不足，等待整点刷新' : '只刷新当前席位一次'}><span>{guardianAutoSlotId !== null ? '追橙进行中' : fundBalance < 5 ? '资金不足' : skill ? '刷新一次' : '唤醒一次'}</span><b>¥5</b></button>
+                    <button type="button" className={`guardian-refresh-until-five ${guardianAutoSlotId === slot.id ? 'active' : ''}`} onClick={() => toggleGuardianAutoRefresh(slot.id)} disabled={!hasHydrated || !fundHasHydrated || (guardianAutoSlotId !== slot.id && (fundBalance < 5 || skill?.level === 5 || guardianAutoSlotId !== null))} title={guardianAutoSlotId === slot.id ? '点击停止自动刷新' : skill?.level === 5 ? '当前已是橙卡' : '每隔0.3秒刷新当前席位，出现5级技能后自动停止'}><span>{guardianAutoSlotId === slot.id ? '停止追橙' : skill?.level === 5 ? '已达橙卡' : '追至橙卡'}</span><small>{guardianAutoSlotId === slot.id ? '0.3秒 / 次' : skill?.level === 5 ? '无需刷新' : '¥5 / 次'}</small></button>
+                  </div>
                 </article>
               );
             })}
@@ -1906,6 +1981,7 @@ export default function Home() {
             <p><span>01</span>单席 ¥5；四席同时刷新 ¥1</p>
             <p><span>02</span>技能按公示基础概率随机出现</p>
             <p><span>03</span>其他席位已有两个同类时，该类本次不再出现</p>
+            <p><span>04</span>追至橙卡每 0.3 秒刷新一次，5级或余额不足时停止</p>
           </section>
           <div className="guardian-history-heading"><span>最近显现</span><i>{guardianHistory.length}</i></div>
           <div className="guardian-history-list">
@@ -1913,7 +1989,7 @@ export default function Home() {
               const skill = guardianSkillById.get(entry.skillId);
               const previousSkill = entry.previousSkillId ? guardianSkillById.get(entry.previousSkillId) : null;
               if (!skill) return null;
-              return <article key={entry.id} style={{ '--history-accent': skill.accent } as CSSProperties}><span>{entry.mode === 'all' ? `全刷 · ${entry.slotId}` : `第 ${entry.slotId} 席`}</span><div><b>{skill.name}</b><small>{previousSkill ? `${previousSkill.name} → ${skill.name}` : `首次获得 · ${skill.groupName}`}</small></div><em>Lv.{skill.level}</em></article>;
+              return <article key={entry.id} style={{ '--history-accent': skill.accent } as CSSProperties}><span>{entry.mode === 'all' ? `全刷 · ${entry.slotId}` : entry.mode === 'until-five' ? `追橙 · ${entry.slotId}` : `第 ${entry.slotId} 席`}</span><div><b>{skill.name}</b><small>{entry.mode === 'until-five' ? `自动刷新 · ${previousSkill ? `${previousSkill.name} → ${skill.name}` : `首次获得 · ${skill.groupName}`}` : previousSkill ? `${previousSkill.name} → ${skill.name}` : `首次获得 · ${skill.groupName}`}</small></div><em>Lv.{skill.level}</em></article>;
             })}
           </div>
           <footer className="guardian-ledger-footer"><span><i /> 概率来源：用户提供公示表</span><p>显示的是原始基础概率；受同类上限约束时，会在可用技能中重新归一。</p></footer>

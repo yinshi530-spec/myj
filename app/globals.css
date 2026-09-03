@@ -1019,3 +1019,22 @@ button,input { font:inherit; } button { border:0; }
 .guardian-skill-slot>button { border-color:color-mix(in srgb,var(--rank-color) 42%,#45534c); background:linear-gradient(180deg,color-mix(in srgb,var(--rank-color) 10%,#17231f),#101716); }
 .guardian-skill-slot>button b { color:color-mix(in srgb,var(--rank-color) 78%,#f0d8aa); }
 .guardian-skill-slot>button:hover { border-color:var(--rank-color); box-shadow:0 0 16px color-mix(in srgb,var(--rank-color) 20%,transparent); }
+
+/* 单席双操作：保留一次刷新，同时提供按真实次数计费的橙卡追逐。 */
+.guardian-skill-slot { grid-template-rows:auto minmax(0,1fr) 42px; }
+.guardian-slot-actions { position:relative; z-index:4; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:6px; }
+.guardian-slot-actions>button { min-width:0; display:flex; align-items:center; justify-content:center; gap:7px; border:1px solid color-mix(in srgb,var(--rank-color) 42%,#45534c); border-radius:3px; color:#9eb0a6; background:linear-gradient(180deg,color-mix(in srgb,var(--rank-color) 10%,#17231f),#101716); cursor:pointer; transition:border-color .16s ease,color .16s ease,box-shadow .16s ease,transform .16s ease; }
+.guardian-slot-actions>button span { font:700 7px "Noto Serif SC",serif; letter-spacing:.06em; white-space:nowrap; }
+.guardian-slot-actions>button b { color:color-mix(in srgb,var(--rank-color) 78%,#f0d8aa); font:800 9px ui-monospace,monospace; }
+.guardian-slot-actions>button:hover { border-color:var(--rank-color); color:#e1eae3; box-shadow:0 0 14px color-mix(in srgb,var(--rank-color) 18%,transparent); }
+.guardian-slot-actions>button:active { transform:translateY(1px); }
+.guardian-slot-actions>button:disabled { opacity:.4; cursor:not-allowed; transform:none; box-shadow:none; }
+.guardian-slot-actions .guardian-refresh-until-five { display:grid; grid-template-columns:1fr auto; gap:1px 5px; padding:4px 7px; border-color:rgba(255,138,61,.52); color:#ffc18f; background:radial-gradient(circle at 100% 0,rgba(255,138,61,.2),transparent 52%),linear-gradient(145deg,rgba(64,35,21,.94),rgba(22,17,15,.97)); box-shadow:inset 0 0 13px rgba(255,138,61,.06); }
+.guardian-slot-actions .guardian-refresh-until-five span { grid-row:1/3; align-self:center; color:#ffd0a8; }
+.guardian-slot-actions .guardian-refresh-until-five small { color:#9d6544; font:600 5px ui-monospace,monospace; white-space:nowrap; }
+.guardian-slot-actions .guardian-refresh-until-five::after { content:"◆"; color:#ff8a3d; font-size:7px; text-shadow:0 0 8px rgba(255,138,61,.72); }
+.guardian-slot-actions .guardian-refresh-until-five:hover { border-color:#ff9d5d; color:#fff0df; box-shadow:inset 0 0 15px rgba(255,138,61,.1),0 0 17px rgba(255,138,61,.2); }
+.guardian-slot-actions .guardian-refresh-until-five.active { border-color:#ffad70; background:radial-gradient(circle at 100% 0,rgba(255,163,96,.3),transparent 55%),linear-gradient(145deg,rgba(88,43,20,.98),rgba(29,18,14,.98)); box-shadow:inset 0 0 17px rgba(255,138,61,.12),0 0 18px rgba(255,138,61,.25); }
+.guardian-slot-actions .guardian-refresh-until-five.active::after { animation:guardian-auto-pulse .6s ease-in-out infinite alternate; }
+.guardian-skill-slot.auto-refreshing { outline:1px solid color-mix(in srgb,var(--rank-color) 42%,#ff8a3d); outline-offset:3px; }
+@keyframes guardian-auto-pulse { from{opacity:.42;transform:scale(.72)} to{opacity:1;transform:scale(1.24)} }
