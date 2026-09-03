@@ -328,7 +328,7 @@ function isCheckpointLevel(itemId: string, level: number) {
   if (itemId === 'holy-gift') return [2, 4, 6, 8].includes(level);
   if (itemId === 'earring') return [4, 6, 8, 10, 13].includes(level);
   if (itemId === 'goddess-fate' || itemId === 'mophone' || itemId === 'wanxiang') return [4, 6, 8].includes(level);
-  if (itemId === 'mystic-talisman' || itemId === 'primordial-spirit') return [3, 6, 9].includes(level);
+  if (itemId === 'catalyst-stone' || itemId === 'mystic-talisman' || itemId === 'primordial-spirit') return [3, 6, 9].includes(level);
   return false;
 }
 
@@ -384,6 +384,11 @@ const items: ProbabilityItem[] = [
     id: 'annihilation-crown', name: '灭世之冠', category: '宝石与圣器', mode: 'upgrade', symbol: '♛', accent: '#b892ff', accentSoft: '#28172f',
     description: '失败时保持当前等级的十级强化。', sourceNote: '官方公布成功率与保持不变概率。', minLevel: 0, maxLevel: 10,
     rows: stayRows(0, [100, 80, 60, 40, 30, 20, 10, 5, 2, 1]),
+  },
+  {
+    id: 'catalyst-stone', name: '催化神石', category: '宝石与圣器', mode: 'upgrade', symbol: '◆', accent: '#63e6c2', accentSoft: '#123c38',
+    description: '每次升级 ¥3，+3、+6、+9 为保级点。', sourceNote: '逐级成功率沿用元神与神秘护符；失败时回到最近的 +3、+6、+9 保级等级。', minLevel: 0, maxLevel: 10,
+    rows: checkpointRows(0, [100, 100, 90, 80, 50, 50, 30, 15, 10, 2], [0, 3, 6, 9]),
   },
   {
     id: 'crystal-ball', name: '水晶球', category: '宝石与圣器', mode: 'upgrade', symbol: '●', accent: '#65c7ff', accentSoft: '#153249',
@@ -478,6 +483,7 @@ const tierNames = ['原初', '微光', '精炼', '星辉', '神话', '天穹'];
 const effectProfiles: Record<string, { effect: string; rite: string; catalyst: string }> = {
   'burning-gem': { effect: 'flame', rite: '烈焰淬晶', catalyst: '炽炎之心' },
   'annihilation-crown': { effect: 'crown', rite: '灭世加冕', catalyst: '暗雷王印' },
+  'catalyst-stone': { effect: 'catalyst', rite: '神石催化', catalyst: '源质反应核' },
   'crystal-ball': { effect: 'crystal', rite: '水晶共鸣', catalyst: '澄澈灵液' },
   'harmony-cup': { effect: 'chalice', rite: '圣杯灌注', catalyst: '和谐圣泉' },
   'mystic-talisman': { effect: 'talisman', rite: '敕令封印', catalyst: '灵符朱砂' },
@@ -495,6 +501,7 @@ const effectProfiles: Record<string, { effect: string; rite: string; catalyst: s
 const costRules: Record<string, number> = {
   'burning-gem': 3,
   'annihilation-crown': 5,
+  'catalyst-stone': 3,
   'crystal-ball': 3,
   'harmony-cup': 2,
   'mystic-talisman': 2,
@@ -509,7 +516,7 @@ const costRules: Record<string, number> = {
   wanxiang: 8,
 };
 
-const instantUpgradeItems = new Set(['burning-gem', 'annihilation-crown', 'crystal-ball', 'harmony-cup', 'mystic-talisman', 'element-compass', 'moon-myth', 'holy-gift', 'primordial-spirit', 'mophone', 'guardian-star', 'goddess-fate', 'earring', 'wanxiang']);
+const instantUpgradeItems = new Set(['burning-gem', 'annihilation-crown', 'catalyst-stone', 'crystal-ball', 'harmony-cup', 'mystic-talisman', 'element-compass', 'moon-myth', 'holy-gift', 'primordial-spirit', 'mophone', 'guardian-star', 'goddess-fate', 'earring', 'wanxiang']);
 const guardianProtectionCost = 8;
 
 const levelPalettes = {
@@ -991,6 +998,7 @@ export default function Home() {
   const quantityCostLabel = unitCost !== null && itemQuantity > 1 ? `（¥${unitCost.toFixed(0)} × ${itemQuantity}）` : '';
   const flameScale = 0.62 + (tierProgress / 100) * 0.83;
   const crownScale = 0.78 + (tierProgress / 100) * 0.38;
+  const catalystScale = 0.76 + (tierProgress / 100) * 0.44;
   const crystalScale = 0.76 + (tierProgress / 100) * 0.44;
   const harmonyScale = 0.78 + (tierProgress / 100) * 0.42;
   const talismanScale = 0.76 + (tierProgress / 100) * 0.43;
@@ -1031,7 +1039,7 @@ export default function Home() {
         </aside>
 
         <section className="forge-stage">
-          <div className={`forge-chamber fx-${effectProfile.effect} tier-${tier} ${feedbackClass} ${guardianProtectionEnabled ? 'protection-active' : ''}`} key={feedbackKey} style={{ '--tier-progress': `${tierProgress}%`, '--flame-scale': flameScale, '--flame-burst-scale': flameScale * 1.28, '--flame-dip-scale': flameScale * 0.9, '--crown-scale': crownScale, '--crown-entry-scale': crownScale * 0.82, '--crown-burst-scale': crownScale * 1.2, '--crystal-scale': crystalScale, '--harmony-scale': harmonyScale, '--talisman-scale': talismanScale, '--compass-scale': compassScale, '--moon-scale': moonScale, '--ascension-scale': ascensionScale, '--spirit-scale': spiritScale, '--mophone-scale': mophoneScale } as CSSProperties}>
+          <div className={`forge-chamber fx-${effectProfile.effect} tier-${tier} ${feedbackClass} ${guardianProtectionEnabled ? 'protection-active' : ''}`} key={feedbackKey} style={{ '--tier-progress': `${tierProgress}%`, '--flame-scale': flameScale, '--flame-burst-scale': flameScale * 1.28, '--flame-dip-scale': flameScale * 0.9, '--crown-scale': crownScale, '--crown-entry-scale': crownScale * 0.82, '--crown-burst-scale': crownScale * 1.2, '--catalyst-scale': catalystScale, '--crystal-scale': crystalScale, '--harmony-scale': harmonyScale, '--talisman-scale': talismanScale, '--compass-scale': compassScale, '--moon-scale': moonScale, '--ascension-scale': ascensionScale, '--spirit-scale': spiritScale, '--mophone-scale': mophoneScale } as CSSProperties}>
             <div className="altar-glow" />
             {item.mode !== 'draw' && <div className="level-route"><div className="level-focus"><span>当前等级</span><b>{levelLabel(level)}</b></div><div className="level-steps" aria-label="强化等级进度">{Array.from({ length: maxSelectable - (item.minLevel ?? 0) + 1 }, (_, index) => (item.minLevel ?? 0) + index).map((step) => <span key={step} className={`${step === level ? 'current' : step < level ? 'done' : ''} ${isCheckpointLevel(item.id, step) ? 'checkpoint' : ''}`} aria-current={step === level ? 'step' : undefined} title={isCheckpointLevel(item.id, step) ? item.mode === 'adaptive' ? `${step} 星保级点` : `+${step} 保级点` : undefined} style={{ '--step-color': levelPalette(item, step).accent } as CSSProperties}><i /><b>{step}</b></span>)}</div></div>}
             <div className={`effect-stage tier-${tier}`}>
@@ -1063,6 +1071,18 @@ export default function Home() {
                       <div className="crown-shockwave" />
                     </div>
                     <div className="effect-particles crown-ash">{Array.from({ length: 14 }, (_, index) => <i key={index} />)}</div>
+                  </>
+                ) : item.id === 'catalyst-stone' ? (
+                  <>
+                    <div className="catalyst-stone-art" role="img" aria-label="三重反应环中持续催化的神石">
+                      <div className="catalyst-orbits"><i /><i /><i /></div>
+                      <div className="catalyst-checkpoints">
+                        {[3, 6, 9].map((checkpoint) => <i key={checkpoint} className={level >= checkpoint ? 'unlocked' : ''}>{checkpoint}</i>)}
+                      </div>
+                      <div className="catalyst-crystal"><i /><i /><i /><b /></div>
+                      <span className="catalyst-vessel" />
+                    </div>
+                    <div className="effect-particles catalyst-sparks">{Array.from({ length: 16 }, (_, index) => <i key={index} />)}</div>
                   </>
                 ) : item.id === 'crystal-ball' ? (
                   <>

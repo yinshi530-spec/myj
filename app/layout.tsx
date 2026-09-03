@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: '猫游记 · 极品号打造计划',
-  description: '从零记录 17 项核心养成，逐步核算打造极品号所需的真实花费。',
+  description: '从零记录 15 项核心养成，逐步核算打造极品号所需的真实花费。',
 };
 
 export default function RootLayout({
