@@ -105,7 +105,34 @@ type ItemInstance = {
   nickname: string;
 };
 
+type GuardianSkill = {
+  id: string;
+  groupId: string;
+  groupName: string;
+  name: string;
+  level: number;
+  probability: number;
+  accent: string;
+};
+
+type GuardianSlot = {
+  id: number;
+  skillId: string | null;
+  refreshes: number;
+};
+
+type GuardianHistoryEntry = {
+  id: number;
+  slotId: number;
+  skillId: string;
+  previousSkillId: string | null;
+  mode: 'single' | 'all';
+};
+
 const sessionStorageKey = 'myj-forge-session-v1';
+const guardianStorageKey = 'myj-guardian-skills-v1';
+const fundStorageKey = 'myj-hourly-fund-v1';
+const hourlyFundAmount = 10000;
 const individualItemsCostModel = 'individual-items-v3' as const;
 const autoTargetLimits: Record<string, number> = { 'burning-gem': 8, 'moon-myth': 9 };
 const itemQuantities: Record<string, number> = {
@@ -123,6 +150,97 @@ const itemInstanceNames: Record<string, string[]> = {
   'goddess-fate': ['往昔', '今朝', '未来'],
   earring: ['玉凤环', '金凰环'],
 };
+
+const itemInstancePalettes: Record<string, Array<{ accent: string; soft: string }>> = {
+  'crystal-ball': [
+    { accent: '#66c9ff', soft: '#15394e' },
+    { accent: '#ff789d', soft: '#4a1c2e' },
+    { accent: '#4edfc0', soft: '#123b34' },
+    { accent: '#b98aff', soft: '#35214f' },
+    { accent: '#ffc85c', soft: '#4a3517' },
+  ],
+  'moon-myth': [
+    { accent: '#ffd56a', soft: '#4a3715' },
+    { accent: '#62d58a', soft: '#153c29' },
+    { accent: '#58bfff', soft: '#16384f' },
+    { accent: '#ff6655', soft: '#4b1e19' },
+    { accent: '#cf9b58', soft: '#40301e' },
+  ],
+  'holy-gift': [
+    { accent: '#4ed8c0', soft: '#123b36' },
+    { accent: '#d8e4f2', soft: '#303944' },
+    { accent: '#ff695c', soft: '#4a1d1b' },
+    { accent: '#728cff', soft: '#202b52' },
+    { accent: '#f4c75d', soft: '#493716' },
+  ],
+  'goddess-fate': [
+    { accent: '#d7a760', soft: '#44301d' },
+    { accent: '#ec7fac', soft: '#472139' },
+    { accent: '#69d9f1', soft: '#173d4a' },
+  ],
+  earring: [
+    { accent: '#66dbad', soft: '#153c31' },
+    { accent: '#ff9a55', soft: '#4a2818' },
+  ],
+};
+
+const guardianRankProbabilities = [2.5, 1.88, 1.25, 0.56, 0.06] as const;
+const guardianRankNames = ['白卡', '绿卡', '蓝卡', '紫卡', '橙卡'] as const;
+const guardianRankColors = ['#e2e7ea', '#53d889', '#56aaff', '#b879f2', '#ff8a3d'] as const;
+const guardianSkillGroups = [
+  { id: 'armor', name: '甲胄', accent: '#e0b85f', skills: ['铜甲', '铁甲', '钢甲', '银甲', '金甲'] },
+  { id: 'resolve', name: '意志', accent: '#d28d62', skills: ['坚忍', '坚强', '坚定', '坚韧', '坚毅'] },
+  { id: 'agility', name: '身法', accent: '#63d6a2', skills: ['灵活', '敏锐', '机敏', '迅捷', '敏捷'] },
+  { id: 'strength', name: '体魄', accent: '#e66e63', skills: ['强壮', '强健', '顽强', '强韧', '刚毅'] },
+  { id: 'wisdom', name: '灵识', accent: '#7bbdff', skills: ['聪颖', '慧黠', '颖悟', '聪慧', '灵智'] },
+  { id: 'chance', name: '机缘', accent: '#efb85c', skills: ['偶然', '侥幸', '巧合', '意外', '惊喜'] },
+  { id: 'blood', name: '血契', accent: '#e95f72', skills: ['抽取', '吸血', '狂热', '嗜血', '血浴'] },
+  { id: 'armor-spirit', name: '胄系', accent: '#62c8d9', skills: ['兰胄', '灵胄', '幻胄', '法胄', '魔胄'] },
+  { id: 'dispel', name: '驱散', accent: '#8bc79a', skills: ['分散', '耗散', '消散', '弥散', '驱散'] },
+  { id: 'barrier', name: '屏障', accent: '#91a8e8', skills: ['抑制', '抵消', '结界', '屏障', '屏蔽'] },
+  { id: 'mana', name: '汲魔', accent: '#a889ec', skills: ['汲取', '吸收', '吸取', '摄取', '吸魔'] },
+  { id: 'stable', name: '稳固', accent: '#c4b99f', skills: ['稳定', '稳固', '牢固', '坚固', '不灭'] },
+  { id: 'flame', name: '炎术', accent: '#ff7b4e', skills: ['蒸发', '点燃', '灼烧', '蓝炎', '烧尽'] },
+  { id: 'corrode', name: '腐蚀', accent: '#9bc65b', skills: ['腐化', '腐败', '腐蚀', '侵蚀', '瓦解'] },
+  { id: 'pierce', name: '穿甲', accent: '#d99b6c', skills: ['破甲', '穿透', '透甲', '穿刺', '撕裂'] },
+  { id: 'fortune', name: '命数', accent: '#f0cd72', skills: ['一般', '正常', '乐观', '运气', '幸运'] },
+] as const;
+
+const guardianSkills: GuardianSkill[] = guardianSkillGroups.flatMap((group) => group.skills.map((name, index) => ({
+  id: `${group.id}:${index + 1}`,
+  groupId: group.id,
+  groupName: group.name,
+  name,
+  level: index + 1,
+  probability: guardianRankProbabilities[index],
+  accent: group.accent,
+})));
+const guardianSkillById = new Map(guardianSkills.map((skill) => [skill.id, skill]));
+const initialGuardianSlots: GuardianSlot[] = Array.from({ length: 4 }, (_, index) => ({ id: index + 1, skillId: null, refreshes: 0 }));
+
+function randomUnit() {
+  if (typeof globalThis.crypto?.getRandomValues === 'function') {
+    const value = new Uint32Array(1);
+    globalThis.crypto.getRandomValues(value);
+    return value[0] / 4294967296;
+  }
+  return Math.random();
+}
+
+function pickGuardianSkill(groupCounts: Record<string, number>) {
+  const eligibleSkills = guardianSkills.filter((skill) => (groupCounts[skill.groupId] ?? 0) < 2);
+  const totalWeight = eligibleSkills.reduce((sum, skill) => sum + skill.probability, 0);
+  let weightedRoll = randomUnit() * totalWeight;
+  let pickedSkill = eligibleSkills[eligibleSkills.length - 1];
+  for (const skill of eligibleSkills) {
+    weightedRoll -= skill.probability;
+    if (weightedRoll < 0) {
+      pickedSkill = skill;
+      break;
+    }
+  }
+  return pickedSkill;
+}
 
 function itemInstanceId(itemId: string, index = 0) {
   return (itemQuantities[itemId] ?? 1) > 1 ? `${itemId}:${index + 1}` : itemId;
@@ -210,10 +328,10 @@ async function createGraduationPosterFile(snapshot: GraduationSnapshot) {
   context.fillText('极品号毕业照', 540, 222);
   context.fillStyle = '#746b80';
   context.font = '400 22px "Noto Serif SC", serif';
-  context.fillText('燃烧宝石 +8 · 星月神话 +9 · 其余项目全 10', 540, 268);
+  context.fillText('燃烧 +8 · 星月 +9 · 催化 +10 · 其余全 10 · 守护四席 Lv.5', 540, 268);
 
   const drawStandard = (x: number, label: string, color: string) => {
-    roundedRectPath(context, x, 294, 220, 48, 24);
+    roundedRectPath(context, x, 294, 160, 48, 24);
     context.fillStyle = 'rgba(13,17,25,.82)';
     context.fill();
     context.strokeStyle = color;
@@ -221,12 +339,14 @@ async function createGraduationPosterFile(snapshot: GraduationSnapshot) {
     context.stroke();
     context.globalAlpha = 1;
     context.fillStyle = color;
-    context.font = '600 19px "Noto Serif SC", serif';
-    context.fillText(label, x + 110, 326);
+    context.font = '600 16px "Noto Serif SC", serif';
+    context.fillText(label, x + 80, 326);
   };
-  drawStandard(180, '燃烧 +8  达成', '#ff7a32');
-  drawStandard(430, '星月 +9  达成', '#b67cff');
-  drawStandard(680, '其余全 10  达成', '#4ed08b');
+  drawStandard(110, '燃烧 +8', '#ff7a32');
+  drawStandard(285, '星月 +9', '#b67cff');
+  drawStandard(460, '催化 +10', '#5adbb6');
+  drawStandard(635, '其余全 10', '#55a8ff');
+  drawStandard(810, '守护 4×Lv.5', '#f2c75f');
 
   context.textAlign = 'left';
   context.fillStyle = '#a5906c';
@@ -492,6 +612,10 @@ function itemInstanceName(instance: ItemInstance) {
   return instance.quantity > 1 ? `${instance.item.name} · ${instance.nickname}` : instance.item.name;
 }
 
+function itemInstancePalette(instance: ItemInstance, level: number) {
+  return itemInstancePalettes[instance.item.id]?.[instance.index] ?? levelPalette(instance.item, level);
+}
+
 const autoTargetInstanceLimits: Record<string, number> = Object.fromEntries(
   itemInstances
     .filter((instance) => autoTargetLimits[instance.item.id] !== undefined)
@@ -560,6 +684,21 @@ const costRules: Record<string, number> = {
 const instantUpgradeItems = new Set(['burning-gem', 'annihilation-crown', 'catalyst-stone', 'crystal-ball', 'harmony-cup', 'mystic-talisman', 'element-compass', 'moon-myth', 'holy-gift', 'primordial-spirit', 'mophone', 'guardian-star', 'goddess-fate', 'earring', 'wanxiang']);
 const guardianProtectionCost = 8;
 
+function localHourKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hour = String(date.getHours()).padStart(2, '0');
+  return `${year}-${month}-${day}-${hour}`;
+}
+
+function countdownToNextHour(now: number) {
+  const nextHour = new Date(now);
+  nextHour.setHours(nextHour.getHours() + 1, 0, 0, 0);
+  const seconds = Math.max(0, Math.ceil((nextHour.getTime() - now) / 1000));
+  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
 const levelPalettes = {
   neutral: { accent: '#9b9386', soft: '#292622' },
   green: { accent: '#4ed08b', soft: '#143a2a' },
@@ -579,6 +718,7 @@ function levelPalette(item: ProbabilityItem, level: number) {
 
 export default function Home() {
   const initialLevels = useMemo(() => Object.fromEntries(itemInstances.filter((instance) => instance.item.mode !== 'draw').map((instance) => [instance.id, instance.item.minLevel ?? 0])), []);
+  const [activeSystem, setActiveSystem] = useState<'forge' | 'guardian'>('forge');
   const [selectedId, setSelectedId] = useState(itemInstances[0].id);
   const [levels, setLevels] = useState<Record<string, number>>(initialLevels);
   const [targetLevels, setTargetLevels] = useState<Record<string, number>>({ ...autoTargetInstanceLimits });
@@ -595,10 +735,22 @@ export default function Home() {
   const [guardianProtection, setGuardianProtection] = useState(false);
   const [costLedger, setCostLedger] = useState({ knownSpend: 0, pricedAttempts: 0, itemSpend: {} as Record<string, number> });
   const [hasHydrated, setHasHydrated] = useState(false);
+  const [fundBalance, setFundBalance] = useState(hourlyFundAmount);
+  const [fundHourKey, setFundHourKey] = useState('');
+  const [fundNow, setFundNow] = useState(0);
+  const [fundHasHydrated, setFundHasHydrated] = useState(false);
+  const [fundNotice, setFundNotice] = useState<string | null>(null);
+  const fundBalanceRef = useRef(hourlyFundAmount);
+  const fundHourKeyRef = useRef('');
+  const fundNoticeTimer = useRef<number | null>(null);
+  const fundBackdoorClicks = useRef(0);
   const [costDetailsOpen, setCostDetailsOpen] = useState(false);
   const [graduationPosterOpen, setGraduationPosterOpen] = useState(false);
   const [graduationSnapshot, setGraduationSnapshot] = useState<GraduationSnapshot | null>(null);
   const [posterStatus, setPosterStatus] = useState<'rendering' | 'ready' | 'shared' | 'saved' | 'error'>('rendering');
+  const [guardianSlots, setGuardianSlots] = useState<GuardianSlot[]>(initialGuardianSlots);
+  const [guardianHistory, setGuardianHistory] = useState<GuardianHistoryEntry[]>([]);
+  const [guardianLatestSlot, setGuardianLatestSlot] = useState<number | null>(null);
   const graduationPosterFile = useRef<File | null>(null);
   const posterBuildSequence = useRef(0);
 
@@ -705,6 +857,60 @@ export default function Home() {
   }, [initialLevels]);
 
   useEffect(() => {
+    try {
+      const rawGuardian = window.localStorage.getItem(guardianStorageKey);
+      if (!rawGuardian) return;
+      const stored = JSON.parse(rawGuardian) as { slots?: GuardianSlot[]; history?: GuardianHistoryEntry[] };
+      if (Array.isArray(stored.slots) && stored.slots.length === 4) {
+        const storedIds = stored.slots.map((slot) => slot.id);
+        const hasValidSlotIds = storedIds.every((id) => Number.isInteger(id) && id >= 1 && id <= 4) && new Set(storedIds).size === 4;
+        const restoredSlots = stored.slots.map((slot, index) => ({
+          id: hasValidSlotIds ? slot.id : index + 1,
+          skillId: typeof slot.skillId === 'string' && guardianSkillById.has(slot.skillId) ? slot.skillId : null,
+          refreshes: typeof slot.refreshes === 'number' && Number.isFinite(slot.refreshes) ? Math.max(0, Math.floor(slot.refreshes)) : 0,
+        }));
+        setGuardianSlots(restoredSlots);
+      }
+      if (Array.isArray(stored.history)) {
+        setGuardianHistory(stored.history.filter((entry) => entry
+          && typeof entry.id === 'number'
+          && typeof entry.slotId === 'number'
+          && typeof entry.skillId === 'string'
+          && guardianSkillById.has(entry.skillId)
+          && (entry.previousSkillId === null || (typeof entry.previousSkillId === 'string' && guardianSkillById.has(entry.previousSkillId))))
+          .slice(0, 40)
+          .map((entry) => ({ ...entry, mode: entry.mode === 'all' ? 'all' : 'single' })));
+      }
+    } catch (error) {
+      console.warn('守护技能进度恢复失败:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    const currentHour = localHourKey();
+    let restoredBalance = hourlyFundAmount;
+    try {
+      const rawFund = window.localStorage.getItem(fundStorageKey);
+      if (rawFund) {
+        const stored = JSON.parse(rawFund) as { balance?: number; hourKey?: string };
+        if (stored.hourKey === currentHour && typeof stored.balance === 'number' && Number.isFinite(stored.balance) && stored.balance >= 0) {
+          restoredBalance = stored.balance;
+        } else {
+          showFundNotice('整点资金已刷新');
+        }
+      }
+    } catch (error) {
+      console.warn('资金池进度恢复失败:', error);
+    }
+    fundBalanceRef.current = restoredBalance;
+    fundHourKeyRef.current = currentHour;
+    setFundBalance(restoredBalance);
+    setFundHourKey(currentHour);
+    setFundNow(Date.now());
+    setFundHasHydrated(true);
+  }, []);
+
+  useEffect(() => {
     if (!hasHydrated) return;
     const stored: StoredSession = {
       version: 1,
@@ -724,9 +930,44 @@ export default function Home() {
     }
   }, [attemptCount, attempts, costLedger, guardianProtection, hasHydrated, levels, selectedId, targetLevels]);
 
+  useEffect(() => {
+    if (!hasHydrated) return;
+    try {
+      window.localStorage.setItem(guardianStorageKey, JSON.stringify({ slots: guardianSlots, history: guardianHistory }));
+    } catch (error) {
+      console.warn('守护技能进度保存失败:', error);
+    }
+  }, [guardianHistory, guardianSlots, hasHydrated]);
+
+  useEffect(() => {
+    if (!fundHasHydrated) return;
+    try {
+      window.localStorage.setItem(fundStorageKey, JSON.stringify({ balance: fundBalance, hourKey: fundHourKey }));
+    } catch (error) {
+      console.warn('资金池进度保存失败:', error);
+    }
+  }, [fundBalance, fundHasHydrated, fundHourKey]);
+
+  useEffect(() => {
+    const tick = () => {
+      const now = Date.now();
+      const currentHour = localHourKey(new Date(now));
+      setFundNow(now);
+      if (!fundHourKeyRef.current || currentHour === fundHourKeyRef.current) return;
+      fundBalanceRef.current = hourlyFundAmount;
+      fundHourKeyRef.current = currentHour;
+      setFundBalance(hourlyFundAmount);
+      setFundHourKey(currentHour);
+      showFundNotice('整点到账 ¥10,000');
+    };
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
   useEffect(() => () => {
     if (pendingForgeTimer.current !== null) window.clearTimeout(pendingForgeTimer.current);
     if (autoTargetTimer.current !== null) window.clearTimeout(autoTargetTimer.current);
+    if (fundNoticeTimer.current !== null) window.clearTimeout(fundNoticeTimer.current);
   }, []);
 
   useEffect(() => {
@@ -774,24 +1015,59 @@ export default function Home() {
   const moonGraduated = itemInstances
     .filter((instance) => instance.item.id === 'moon-myth')
     .every((instance) => (levels[instance.id] ?? 0) >= 9);
+  const catalystGraduated = itemInstances
+    .filter((instance) => instance.item.id === 'catalyst-stone')
+    .every((instance) => (levels[instance.id] ?? 0) >= 10);
   const otherItemsGraduated = itemInstances
-    .filter((instance) => instance.item.id !== 'burning-gem' && instance.item.id !== 'moon-myth')
+    .filter((instance) => !['burning-gem', 'moon-myth', 'catalyst-stone'].includes(instance.item.id))
     .every((instance) => (levels[instance.id] ?? instance.item.minLevel ?? 0) >= Math.min(10, instance.item.maxLevel ?? 10));
-  const graduationReady = burningGraduated && moonGraduated && otherItemsGraduated;
-  const costDetailItems = itemInstances.map((instance) => {
-    const entry = instance.item;
-    const currentLevel = levels[instance.id] ?? entry.minLevel ?? 0;
+  const guardianSkillsGraduated = guardianSlots.every((slot) => {
+    const skill = slot.skillId ? guardianSkillById.get(slot.skillId) : null;
+    return skill?.level === 5;
+  });
+  const graduationReady = burningGraduated && moonGraduated && catalystGraduated && otherItemsGraduated && guardianSkillsGraduated;
+  const guardianResolvedSlots = guardianSlots.map((slot) => ({ ...slot, skill: slot.skillId ? guardianSkillById.get(slot.skillId) ?? null : null }));
+  const guardianRefreshes = guardianSlots.reduce((sum, slot) => sum + slot.refreshes, 0);
+  const guardianSingleSpend = guardianSlots.reduce((sum, slot) => sum + (costLedger.itemSpend[`guardian-skill:${slot.id}`] ?? 0), 0);
+  const guardianBulkSpend = costLedger.itemSpend['guardian-skill:all'] ?? 0;
+  const guardianSpend = guardianSingleSpend + guardianBulkSpend;
+  const guardianSingleRefreshes = Math.round(guardianSingleSpend / 5);
+  const guardianBulkRefreshes = Math.round(guardianBulkSpend);
+  const equippedGuardianGroups = guardianResolvedSlots.reduce<Record<string, number>>((counts, slot) => {
+    if (slot.skill) counts[slot.skill.groupId] = (counts[slot.skill.groupId] ?? 0) + 1;
+    return counts;
+  }, {});
+  const costDetailItems = [...items.map((entry) => {
+    const instances = itemInstances.filter((instance) => instance.item.id === entry.id);
+    const currentLevels = instances.map((instance) => levels[instance.id] ?? entry.minLevel ?? 0);
+    const lowestLevel = Math.min(...currentLevels);
+    const highestLevel = Math.max(...currentLevels);
+    const levelSuffix = entry.mode === 'adaptive' ? '★' : entry.mode === 'check' ? '档' : '';
+    const levelPrefix = entry.mode === 'upgrade' ? '+' : '';
+    const levelSummary = entry.mode === 'draw'
+      ? '秘宝唤醒'
+      : lowestLevel === highestLevel
+        ? `${levelPrefix}${lowestLevel}${levelSuffix}${instances.length > 1 ? ` ×${instances.length}` : ''}`
+        : `${levelPrefix}${lowestLevel}${levelSuffix}–${levelPrefix}${highestLevel}${levelSuffix} · ${instances.length} 件`;
     const unitCost = costRules[entry.id] ?? null;
     return {
-      id: instance.id,
+      id: entry.id,
       baseItemId: entry.id,
-      name: itemInstanceName(instance),
-      level: entry.mode === 'adaptive' ? `${currentLevel}★` : `+${currentLevel}`,
+      name: instances.length > 1 ? `${entry.name} ×${instances.length}` : entry.name,
+      level: levelSummary,
       unitCost,
       attemptCost: unitCost,
-      spend: costLedger.itemSpend[instance.id] ?? 0,
+      spend: instances.reduce((sum, instance) => sum + (costLedger.itemSpend[instance.id] ?? 0), 0),
     };
-  });
+  }), {
+    id: 'guardian-skills',
+    baseItemId: 'guardian-skill',
+    name: '守护技能 ×4',
+    level: `${guardianResolvedSlots.filter((slot) => slot.skill).length}/4 席 · 单刷 ${guardianSingleRefreshes} / 全刷 ${guardianBulkRefreshes}`,
+    unitCost: 5,
+    attemptCost: 5,
+    spend: guardianSpend,
+  }];
   const categorizedCost = costDetailItems.reduce((sum, entry) => sum + entry.spend, 0);
   const uncategorizedCost = Math.max(0, costLedger.knownSpend - categorizedCost);
   const autoTargetLimit = autoTargetInstanceLimits[itemKey] ?? null;
@@ -815,6 +1091,39 @@ export default function Home() {
     setSelectedId(next.id);
     setLastAttempt(null);
     setResultFeedbacks([]);
+  }
+
+  function showFundNotice(message: string) {
+    if (fundNoticeTimer.current !== null) window.clearTimeout(fundNoticeTimer.current);
+    setFundNotice(message);
+    fundNoticeTimer.current = window.setTimeout(() => {
+      setFundNotice(null);
+      fundNoticeTimer.current = null;
+    }, 1800);
+  }
+
+  function spendFromFund(amount: number) {
+    if (!fundHasHydrated) return false;
+    const safeAmount = Math.max(0, amount);
+    if (fundBalanceRef.current < safeAmount) {
+      showFundNotice(`余额不足，还差 ¥${(safeAmount - fundBalanceRef.current).toFixed(0)}`);
+      return false;
+    }
+    const nextBalance = fundBalanceRef.current - safeAmount;
+    fundBalanceRef.current = nextBalance;
+    setFundBalance(nextBalance);
+    return true;
+  }
+
+  function triggerFundBackdoor() {
+    if (!hasHydrated || !fundHasHydrated) return;
+    fundBackdoorClicks.current += 1;
+    if (fundBackdoorClicks.current < 10) return;
+    fundBackdoorClicks.current = 0;
+    const nextBalance = fundBalanceRef.current + 100000;
+    fundBalanceRef.current = nextBalance;
+    setFundBalance(nextBalance);
+    showFundNotice('秘库注资 ¥100,000');
   }
 
   function createAttempt(activeItem: ProbabilityItem, activeItemKey: string, activeInstanceName: string, currentLevel: number, count: number, sequence: number) {
@@ -879,12 +1188,16 @@ export default function Home() {
       if (item.mode === 'adaptive') currentCount += 1;
     }
     if (!generated.length) return;
+    const generatedSpend = generated.reduce((sum, attempt) => sum + (attempt.cost ?? 0), 0);
+    if (!spendFromFund(generatedSpend)) {
+      if (forceInstant) stopAutoTargetRun();
+      return;
+    }
     const applyResults = () => {
       pendingForgeTimer.current = null;
       const latestAttempts = [...generated].reverse();
       if (item.mode === 'upgrade' || item.mode === 'adaptive') setLevels((current) => ({ ...current, [itemKey]: currentLevel }));
       if (item.mode === 'adaptive') setAttemptCount(currentCount);
-      const generatedSpend = generated.reduce((sum, attempt) => sum + (attempt.cost ?? 0), 0);
       setCostLedger((current) => ({
         knownSpend: current.knownSpend + generatedSpend,
         pricedAttempts: current.pricedAttempts + generated.filter((attempt) => attempt.cost !== null).length,
@@ -981,7 +1294,13 @@ export default function Home() {
         spend: instances.reduce((sum, instance) => sum + (costLedger.itemSpend[instance.id] ?? 0), 0),
       };
     });
-    const recordedItemSpend = itemInstances.reduce((sum, instance) => sum + (costLedger.itemSpend[instance.id] ?? 0), 0);
+    itemSpends.push({
+      id: 'guardian-skills',
+      name: '守护技能 ×4',
+      level: guardianSkillsGraduated ? '4×Lv.5' : `${guardianResolvedSlots.filter((slot) => slot.skill).length}/4 席`,
+      spend: guardianSpend,
+    });
+    const recordedItemSpend = itemInstances.reduce((sum, instance) => sum + (costLedger.itemSpend[instance.id] ?? 0), 0) + guardianSpend;
     const historicalSpend = Math.max(0, costLedger.knownSpend - recordedItemSpend);
     if (historicalSpend >= .01) {
       itemSpends.push({ id: 'legacy-history', name: '历史记录', level: '—', spend: historicalSpend });
@@ -1011,7 +1330,7 @@ export default function Home() {
   function shareGraduationPoster() {
     if (!graduationSnapshot) return;
     const file = graduationPosterFile.current;
-    const shareText = `花费 ¥${graduationSnapshot.spend.toFixed(2)} 毕业了！燃烧宝石 +8，星月神话 +9，其余项目全 10。`;
+    const shareText = `花费 ¥${graduationSnapshot.spend.toFixed(2)} 毕业了！燃烧宝石 +8，星月神话 +9，催化神石 +10，其余项目全 10，守护四席均为 5 级技能。`;
     if (navigator.share) {
       const canShareFile = !!file && typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] });
       const shareData: ShareData = canShareFile
@@ -1031,6 +1350,73 @@ export default function Home() {
     void navigator.clipboard?.writeText(shareText).then(() => setPosterStatus('shared')).catch(() => setPosterStatus('error'));
   }
 
+  function refreshGuardianSlot(slotId: number) {
+    const otherGroupCounts = guardianResolvedSlots.reduce<Record<string, number>>((counts, slot) => {
+      if (slot.id !== slotId && slot.skill) counts[slot.skill.groupId] = (counts[slot.skill.groupId] ?? 0) + 1;
+      return counts;
+    }, {});
+    const nextSkill = pickGuardianSkill(otherGroupCounts);
+    if (!nextSkill) return;
+    if (!spendFromFund(5)) return;
+    const previousSkillId = guardianSlots.find((slot) => slot.id === slotId)?.skillId ?? null;
+    const historyEntry: GuardianHistoryEntry = {
+      id: (Date.now() * 10) + slotId,
+      slotId,
+      skillId: nextSkill.id,
+      previousSkillId,
+      mode: 'single',
+    };
+    setGuardianSlots((current) => current.map((slot) => slot.id === slotId
+      ? { ...slot, skillId: nextSkill.id, refreshes: slot.refreshes + 1 }
+      : slot));
+    setGuardianHistory((current) => [historyEntry, ...current].slice(0, 40));
+    setGuardianLatestSlot(slotId);
+    setCostLedger((current) => ({
+      knownSpend: current.knownSpend + 5,
+      pricedAttempts: current.pricedAttempts + 1,
+      itemSpend: {
+        ...current.itemSpend,
+        [`guardian-skill:${slotId}`]: (current.itemSpend[`guardian-skill:${slotId}`] ?? 0) + 5,
+      },
+    }));
+  }
+
+  function refreshAllGuardianSlots() {
+    const nextGroupCounts: Record<string, number> = {};
+    const timestamp = Date.now() * 10;
+    const nextHistory: GuardianHistoryEntry[] = [];
+    const nextSlots = guardianSlots.map((slot) => {
+      const nextSkill = pickGuardianSkill(nextGroupCounts);
+      if (!nextSkill) return slot;
+      nextGroupCounts[nextSkill.groupId] = (nextGroupCounts[nextSkill.groupId] ?? 0) + 1;
+      nextHistory.push({
+        id: timestamp + slot.id,
+        slotId: slot.id,
+        skillId: nextSkill.id,
+        previousSkillId: slot.skillId,
+        mode: 'all',
+      });
+      return { ...slot, skillId: nextSkill.id, refreshes: slot.refreshes + 1 };
+    });
+    if (!nextHistory.length || !spendFromFund(1)) return;
+    const sortedNextSlots = [...nextSlots].sort((left, right) => {
+      const leftLevel = left.skillId ? guardianSkillById.get(left.skillId)?.level ?? 0 : 0;
+      const rightLevel = right.skillId ? guardianSkillById.get(right.skillId)?.level ?? 0 : 0;
+      return rightLevel - leftLevel || left.id - right.id;
+    });
+    setGuardianSlots(sortedNextSlots);
+    setGuardianHistory((current) => [...nextHistory.reverse(), ...current].slice(0, 40));
+    setGuardianLatestSlot(0);
+    setCostLedger((current) => ({
+      knownSpend: current.knownSpend + 1,
+      pricedAttempts: current.pricedAttempts + 1,
+      itemSpend: {
+        ...current.itemSpend,
+        'guardian-skill:all': (current.itemSpend['guardian-skill:all'] ?? 0) + 1,
+      },
+    }));
+  }
+
   function restartSession() {
     stopAutoTargetRun();
     if (pendingForgeTimer.current !== null) {
@@ -1038,6 +1424,8 @@ export default function Home() {
       pendingForgeTimer.current = null;
     }
     window.localStorage.removeItem(sessionStorageKey);
+    window.localStorage.removeItem(guardianStorageKey);
+    window.localStorage.removeItem(fundStorageKey);
     feedbackSequence.current = 0;
     posterBuildSequence.current += 1;
     graduationPosterFile.current = null;
@@ -1053,11 +1441,25 @@ export default function Home() {
     setLastAttempt(null);
     setResultFeedbacks([]);
     setGuardianProtection(false);
+    setGuardianSlots(initialGuardianSlots);
+    setGuardianHistory([]);
+    setGuardianLatestSlot(null);
     setCostLedger({ knownSpend: 0, pricedAttempts: 0, itemSpend: {} });
+    const currentHour = localHourKey();
+    fundBalanceRef.current = hourlyFundAmount;
+    fundHourKeyRef.current = currentHour;
+    setFundBalance(hourlyFundAmount);
+    setFundHourKey(currentHour);
+    setFundNow(Date.now());
+    setFundNotice(null);
+    fundBackdoorClicks.current = 0;
   }
 
-  const currentLevelPalette = levelPalette(item, level);
+  const currentLevelPalette = itemInstancePalette(selectedInstance, level);
   const theme = { '--accent': currentLevelPalette.accent, '--accent-soft': currentLevelPalette.soft } as CSSProperties;
+  const pageTheme = activeSystem === 'guardian'
+    ? { '--accent': '#65d3ac', '--accent-soft': '#153a30' } as CSSProperties
+    : theme;
   const maxSelectable = item.maxLevel ?? item.minLevel ?? 0;
   const canForge = item.mode === 'draw' || outcomes.length > 0;
   const actionLabel = item.mode === 'draw' ? '唤醒图腾' : item.mode === 'check' ? '进行祈愿' : item.mode === 'adaptive' ? '点亮星辰' : '开始强化';
@@ -1069,6 +1471,8 @@ export default function Home() {
   const itemQuantity = selectedInstance.quantity;
   const guardianProtectionEnabled = item.id === 'guardian-star' && guardianProtection;
   const attemptUnitCost = unitCost === null ? null : unitCost + (guardianProtectionEnabled ? guardianProtectionCost : 0);
+  const canAffordAttempt = fundHasHydrated && (attemptUnitCost === null || fundBalance >= attemptUnitCost);
+  const fundCountdown = fundHasHydrated && fundNow ? countdownToNextHour(fundNow) : '--:--';
   const flameScale = 0.62 + (tierProgress / 100) * 0.83;
   const crownScale = 0.78 + (tierProgress / 100) * 0.38;
   const catalystScale = 0.76 + (tierProgress / 100) * 0.44;
@@ -1086,18 +1490,27 @@ export default function Home() {
   const feedbackKey = usesLevelOnlyFeedback ? itemKey : `${itemKey}-${lastAttempt?.id ?? 'idle'}`;
 
   return (
-    <main className={`game-forge ${isRolling ? 'is-forging' : ''}`} style={theme}>
+    <main className={`game-forge ${activeSystem === 'guardian' ? 'guardian-system-active' : ''} ${isRolling ? 'is-forging' : ''}`} style={pageTheme}>
       <header className="game-hud compact-hud cost-hud">
+        <nav className="system-tabs" aria-label="养成系统">
+          <button type="button" className={activeSystem === 'forge' ? 'active' : ''} onClick={() => setActiveSystem('forge')}><i>◇</i><span>装备打造</span></button>
+          <button type="button" className={activeSystem === 'guardian' ? 'active' : ''} onClick={() => setActiveSystem('guardian')}><i>守</i><span>守护技能</span></button>
+        </nav>
         <div className="hud-cost-only">
+          <div className={`hourly-fund ${fundBalance < 1000 ? 'low' : ''}`} title="每个整点重置为 ¥10,000">
+            <span><i />整点资金池</span>
+            <b>¥{fundBalance.toLocaleString('zh-CN', { maximumFractionDigits: 0 })}</b>
+            <small aria-live="polite">{fundNotice ?? `距刷新 ${fundCountdown}`}</small>
+          </div>
           <span>已知累计花费</span>
           <button type="button" className="hud-cost-detail-trigger" onClick={() => setCostDetailsOpen(true)} disabled={!hasHydrated} title="查看每个强化物品的花费明细"><b>¥{costLedger.knownSpend.toFixed(2)}</b><small>查看明细</small></button>
-          <em>{hasHydrated ? '本地已保存' : '正在恢复进度'}</em>
-          <button type="button" className={`graduation-trigger ${graduationReady ? 'ready' : ''}`} onClick={openGraduationPoster} disabled={!hasHydrated || !graduationReady} title={graduationReady ? '生成并分享毕业海报' : '毕业条件：燃烧宝石 +8、星月神话 +9、其余项目全 10'}>毕业照</button>
+          <em onClick={triggerFundBackdoor}>{hasHydrated ? '本地已保存' : '正在恢复进度'}</em>
+          <button type="button" className={`graduation-trigger ${graduationReady ? 'ready' : ''}`} onClick={openGraduationPoster} disabled={!hasHydrated || !graduationReady} title={graduationReady ? '生成并分享毕业海报' : '毕业条件：燃烧宝石 +8、星月神话 +9、催化神石 +10、其余项目全 10、守护四席均为 5 级技能'}>毕业照</button>
           <button type="button" onClick={restartSession} disabled={!hasHydrated}>重新计算</button>
         </div>
       </header>
 
-      <section className="forge-layout">
+      <section className={`forge-layout ${activeSystem === 'forge' ? '' : 'system-hidden'}`}>
         <aside className="catalog-panel">
           <div className="catalog-heading"><div><span>培养清单</span><b>{items.length} 类 · {itemInstances.length} 件</b></div><small>同名装备独立培养，点击编号切换本体</small></div>
           <div className="item-list">
@@ -1131,7 +1544,7 @@ export default function Home() {
                       const instanceLevel = levels[instance.id] ?? entry.minLevel ?? 0;
                       const progress = Math.round(((instanceLevel - (entry.minLevel ?? 0)) / Math.max(1, (entry.maxLevel ?? 1) - (entry.minLevel ?? 0))) * 100);
                       const instanceTier = visualTier(entry, instanceLevel);
-                      const instancePalette = levelPalette(entry, instanceLevel);
+                      const instancePalette = itemInstancePalette(instance, instanceLevel);
                       const isComplete = instanceLevel >= (entry.maxLevel ?? 1);
                       const isActive = instance.id === itemKey;
                       return (
@@ -1153,7 +1566,7 @@ export default function Home() {
         <section className="forge-stage">
           <div className={`forge-chamber fx-${effectProfile.effect} tier-${tier} ${feedbackClass} ${guardianProtectionEnabled ? 'protection-active' : ''}`} key={feedbackKey} style={{ '--tier-progress': `${tierProgress}%`, '--flame-scale': flameScale, '--flame-burst-scale': flameScale * 1.28, '--flame-dip-scale': flameScale * 0.9, '--crown-scale': crownScale, '--crown-entry-scale': crownScale * 0.82, '--crown-burst-scale': crownScale * 1.2, '--catalyst-scale': catalystScale, '--crystal-scale': crystalScale, '--harmony-scale': harmonyScale, '--talisman-scale': talismanScale, '--compass-scale': compassScale, '--moon-scale': moonScale, '--ascension-scale': ascensionScale, '--spirit-scale': spiritScale, '--mophone-scale': mophoneScale } as CSSProperties}>
             <div className="altar-glow" />
-            {item.mode !== 'draw' && <div className="level-route"><div className="level-focus"><span>当前等级</span><b>{levelLabel(level)}</b>{itemQuantity > 1 && <em className="current-instance">{selectedInstance.nickname} · {String(itemInstanceNumber).padStart(2, '0')} / {String(itemQuantity).padStart(2, '0')}</em>}</div><div className="level-steps" aria-label={`${itemInstanceName(selectedInstance)}强化等级进度`}>{Array.from({ length: maxSelectable - (item.minLevel ?? 0) + 1 }, (_, index) => (item.minLevel ?? 0) + index).map((step) => <span key={step} className={`${step === level ? 'current' : step < level ? 'done' : ''} ${isCheckpointLevel(item.id, step) ? 'checkpoint' : ''}`} aria-current={step === level ? 'step' : undefined} title={isCheckpointLevel(item.id, step) ? item.mode === 'adaptive' ? `${step} 星保级点` : `+${step} 保级点` : undefined} style={{ '--step-color': levelPalette(item, step).accent } as CSSProperties}><i /><b>{step}</b></span>)}</div></div>}
+            {item.mode !== 'draw' && <div className="level-route"><div className="level-focus"><span>当前等级</span><b>{levelLabel(level)}</b>{itemQuantity > 1 && <em className="current-instance">{selectedInstance.nickname} · {String(itemInstanceNumber).padStart(2, '0')} / {String(itemQuantity).padStart(2, '0')}</em>}</div><div className="level-steps" aria-label={`${itemInstanceName(selectedInstance)}强化等级进度`}>{Array.from({ length: maxSelectable - (item.minLevel ?? 0) + 1 }, (_, index) => (item.minLevel ?? 0) + index).map((step) => <span key={step} className={`${step === level ? 'current' : step < level ? 'done' : ''} ${isCheckpointLevel(item.id, step) ? 'checkpoint' : ''}`} aria-current={step === level ? 'step' : undefined} title={isCheckpointLevel(item.id, step) ? item.mode === 'adaptive' ? `${step} 星保级点` : `+${step} 保级点` : undefined} style={{ '--step-color': itemInstancePalette(selectedInstance, step).accent } as CSSProperties}><i /><b>{step}</b></span>)}</div></div>}
             <div className={`effect-stage tier-${tier}`}>
               <div className="effect-visual">
                 {item.id === 'burning-gem' ? (
@@ -1391,13 +1804,13 @@ export default function Home() {
                     />
                     <span>停止</span>
                   </label>
-                  <button type="button" onClick={toggleAutoTargetRun} disabled={!canForge || (!isAutoTargetRunning && level >= targetLevel)} title="每 0.2 秒结算一次单次强化">
-                    {isAutoTargetRunning ? '停止' : level >= targetLevel ? '已到达' : '执行'}
+                  <button type="button" onClick={toggleAutoTargetRun} disabled={!canForge || (!isAutoTargetRunning && (level >= targetLevel || !canAffordAttempt))} title={!canAffordAttempt ? '资金不足，等待整点刷新' : '每 0.2 秒结算一次单次强化'}>
+                    {isAutoTargetRunning ? '停止' : level >= targetLevel ? '已到达' : !canAffordAttempt ? '余额不足' : '执行'}
                   </button>
                 </div>
               )}
-              <button type="button" className="primary-action" onClick={() => simulate(1)} disabled={isRolling || !canForge || isAutoTargetRunning}>
-                <span>{isAutoTargetRunning ? `自动强化中 · ¥${attemptUnitCost?.toFixed(0) ?? '—'} / 0.2 秒` : isRolling ? '强化中…' : canForge ? attemptUnitCost !== null ? `${actionLabel} · ¥${attemptUnitCost.toFixed(0)}` : actionLabel : '已经毕业'}</span>
+              <button type="button" className="primary-action" onClick={() => simulate(1)} disabled={isRolling || !canForge || isAutoTargetRunning || !canAffordAttempt}>
+                <span>{isAutoTargetRunning ? `自动强化中 · ¥${attemptUnitCost?.toFixed(0) ?? '—'} / 0.2 秒` : isRolling ? '强化中…' : !canForge ? '已经毕业' : !canAffordAttempt ? '资金不足 · 等待整点刷新' : attemptUnitCost !== null ? `${actionLabel} · ¥${attemptUnitCost.toFixed(0)}` : actionLabel}</span>
               </button>
             </div>
           </div>
@@ -1432,6 +1845,81 @@ export default function Home() {
         </aside>
       </section>
 
+      <section className={`guardian-layout ${activeSystem === 'guardian' ? '' : 'system-hidden'}`}>
+        <aside className="guardian-atlas-panel">
+          <header className="guardian-panel-heading"><span>技能谱系</span><b>16 类 · 80 项</b><small>每类最多占据两个技能席位</small></header>
+          <div className="guardian-atlas-grid">
+            {guardianSkillGroups.map((group) => {
+              const equippedCount = equippedGuardianGroups[group.id] ?? 0;
+              return (
+                <article key={group.id} className={equippedCount >= 2 ? 'capped' : ''} style={{ '--group-skill-accent': group.accent } as CSSProperties} title={`${group.skills.join(' / ')}；对应等级 1–5`}>
+                  <span><i>{group.name}</i><em>{equippedCount}/2</em></span>
+                  <b>{group.skills[4]}</b>
+                  <small>{group.skills[0]} → {group.skills[4]}</small>
+                </article>
+              );
+            })}
+          </div>
+          <div className="guardian-rank-legend">
+            <span>等级概率</span>
+            {guardianRankProbabilities.map((probability, index) => <i key={probability} style={{ '--rank-color': guardianRankColors[index] } as CSSProperties} title={`${guardianRankNames[index]} · ${probability.toFixed(2)}%`}><b>{index + 1}</b><small>{guardianRankNames[index]}</small><em>{probability.toFixed(2)}%</em></i>)}
+          </div>
+        </aside>
+
+        <section className="guardian-sanctum">
+          <header className="guardian-sanctum-heading">
+            <div><small>GUARDIAN INHERENT SKILLS</small><h2>守护天生技能</h2><p>单刷固定当前席位；四席全刷后按等级从高到低排列。</p></div>
+            <div className="guardian-price-group">
+              <div className="guardian-price"><span>单席刷新</span><b>¥5</b><small>只替换当前席位</small></div>
+              <button type="button" className="guardian-refresh-all" onClick={refreshAllGuardianSlots} disabled={!hasHydrated || !fundHasHydrated || fundBalance < 1} title={fundBalance < 1 ? '资金不足，等待整点刷新' : '一次生成四项'}><span>四席全部刷新</span><b>¥1</b><small>{fundBalance < 1 ? '资金不足' : '一次生成四项'}</small></button>
+            </div>
+          </header>
+          <div className="guardian-formation">
+            <div className="guardian-crest" aria-hidden="true"><i /><i /><i /><b>守</b><span>四象归位</span></div>
+            {guardianResolvedSlots.map((slot) => {
+              const skill = slot.skill;
+              const rankColor = skill ? guardianRankColors[skill.level - 1] : '#615e56';
+              const groupCount = skill ? equippedGuardianGroups[skill.groupId] ?? 0 : 0;
+              return (
+                <article key={`${slot.id}-${slot.refreshes}`} className={`guardian-skill-slot ${skill ? `rank-${skill.level}` : 'empty'} ${guardianLatestSlot === slot.id || guardianLatestSlot === 0 ? 'latest' : ''}`} style={{ '--skill-accent': skill?.accent ?? '#777066', '--rank-color': rankColor } as CSSProperties}>
+                  <header><span>技能席位 {String(slot.id).padStart(2, '0')}</span><div>{skill && <b>{guardianRankNames[skill.level - 1]}</b>}<i>{slot.refreshes} 次刷新</i></div></header>
+                  {skill ? (
+                    <div className="guardian-skill-current">
+                      <span className="guardian-skill-sigil"><b>{skill.name.slice(-1)}</b></span>
+                      <div><small>{skill.groupName} · 同类 {groupCount}/2</small><h3>{skill.name}</h3><p><b>Lv.{skill.level}</b><i>{guardianRankNames[skill.level - 1]}</i><em>基础 {skill.probability.toFixed(2)}%</em></p></div>
+                    </div>
+                  ) : (
+                    <div className="guardian-skill-empty"><span>◇</span><b>等待技能显现</b><small>首次刷新将从完整技能池抽取</small></div>
+                  )}
+                  <button type="button" onClick={() => refreshGuardianSlot(slot.id)} disabled={!hasHydrated || !fundHasHydrated || fundBalance < 5} title={fundBalance < 5 ? '资金不足，等待整点刷新' : undefined}><span>{fundBalance < 5 ? '资金不足' : skill ? '刷新此席' : '唤醒此席'}</span><b>¥5</b></button>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+
+        <aside className="guardian-ledger-panel">
+          <header className="guardian-panel-heading"><span>守护账本</span><b>SKILL LEDGER</b><small>刷新花费计入极品号总成本</small></header>
+          <div className="guardian-cost-card"><span>守护技能花费</span><strong>¥{guardianSpend.toFixed(2)}</strong><small>单席 {guardianSingleRefreshes} 次 · 全席 {guardianBulkRefreshes} 次 · 共生成 {guardianRefreshes} 个词条</small></div>
+          <section className="guardian-rule-card">
+            <header><b>刷新约束</b><i>已启用</i></header>
+            <p><span>01</span>单席 ¥5；四席同时刷新 ¥1</p>
+            <p><span>02</span>技能按公示基础概率随机出现</p>
+            <p><span>03</span>其他席位已有两个同类时，该类本次不再出现</p>
+          </section>
+          <div className="guardian-history-heading"><span>最近显现</span><i>{guardianHistory.length}</i></div>
+          <div className="guardian-history-list">
+            {!guardianHistory.length ? <div className="guardian-history-empty"><i>守</i><b>四席尚未唤醒</b><small>从任意席位开始第一次刷新</small></div> : guardianHistory.slice(0, 7).map((entry) => {
+              const skill = guardianSkillById.get(entry.skillId);
+              const previousSkill = entry.previousSkillId ? guardianSkillById.get(entry.previousSkillId) : null;
+              if (!skill) return null;
+              return <article key={entry.id} style={{ '--history-accent': skill.accent } as CSSProperties}><span>{entry.mode === 'all' ? `全刷 · ${entry.slotId}` : `第 ${entry.slotId} 席`}</span><div><b>{skill.name}</b><small>{previousSkill ? `${previousSkill.name} → ${skill.name}` : `首次获得 · ${skill.groupName}`}</small></div><em>Lv.{skill.level}</em></article>;
+            })}
+          </div>
+          <footer className="guardian-ledger-footer"><span><i /> 概率来源：用户提供公示表</span><p>显示的是原始基础概率；受同类上限约束时，会在可用技能中重新归一。</p></footer>
+        </aside>
+      </section>
+
       {costDetailsOpen && (
         <div className="cost-detail-overlay" onMouseDown={(event) => {
           if (event.target === event.currentTarget) setCostDetailsOpen(false);
@@ -1441,7 +1929,7 @@ export default function Home() {
               <div><small>BUILD COST LEDGER</small><h2 id="cost-detail-title">强化花费明细</h2></div>
               <button type="button" onClick={() => setCostDetailsOpen(false)} aria-label="关闭花费明细">×</button>
             </header>
-            <div className="cost-detail-summary"><span>全部累计花费</span><strong>¥{costLedger.knownSpend.toFixed(2)}</strong><small>{costDetailItems.length} 件装备 · 每件独立记录</small></div>
+            <div className="cost-detail-summary"><span>全部累计花费</span><strong>¥{costLedger.knownSpend.toFixed(2)}</strong><small>{costDetailItems.length} 项培养 · 每项独立记录</small></div>
             <div className="cost-detail-list">
               {costDetailItems.map((entry) => (
                 <article key={entry.id}>
@@ -1478,7 +1966,9 @@ export default function Home() {
               <div className="poster-standards">
                 <span><i />燃烧宝石 +8</span>
                 <span><i />星月神话 +9</span>
+                <span><i />催化神石 +10</span>
                 <span><i />其余项目全 10</span>
+                <span><i />守护四席 Lv.5</span>
               </div>
               <section className="poster-ledger">
                 <header><span>全部养成花费</span><b>{graduationSnapshot.itemSpends.length} 项</b></header>
