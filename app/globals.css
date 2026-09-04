@@ -1038,3 +1038,13 @@ button,input { font:inherit; } button { border:0; }
 .guardian-slot-actions .guardian-refresh-until-five.active::after { animation:guardian-auto-pulse .6s ease-in-out infinite alternate; }
 .guardian-skill-slot.auto-refreshing { outline:1px solid color-mix(in srgb,var(--rank-color) 42%,#ff8a3d); outline-offset:3px; }
 @keyframes guardian-auto-pulse { from{opacity:.42;transform:scale(.72)} to{opacity:1;transform:scale(1.24)} }
+
+/* 隐藏连点器：长按主强化按钮 10 秒完成蓄能，激活后按钮才显露运行状态。 */
+.altar-actions .primary-action { position:relative; overflow:hidden; user-select:none; touch-action:manipulation; }
+.altar-actions .primary-action>span { position:relative; z-index:2; }
+.altar-actions .primary-action:not(.rapid-active):active::after { content:""; position:absolute; z-index:1; left:0; bottom:0; width:0; height:2px; background:linear-gradient(90deg,var(--accent),#fff1bd); box-shadow:0 0 10px var(--accent); animation:rapid-clicker-arm 10s linear forwards; }
+.altar-actions .primary-action.rapid-active { border-color:#ff9c54; color:#fff1d8; background:radial-gradient(circle at 50% 100%,rgba(255,111,42,.24),transparent 62%),linear-gradient(110deg,#4c2317,#8e4220 52%,#3b1d17); box-shadow:inset 0 0 0 2px rgba(10,10,10,.32),inset 0 0 18px rgba(255,129,53,.12),0 0 22px rgba(255,112,43,.26); }
+.altar-actions .primary-action.rapid-active::before { content:"»»"; position:absolute; left:13px; color:#ffb06c; font:900 12px ui-monospace,monospace; letter-spacing:-2px; text-shadow:0 0 9px #ff782f; animation:rapid-clicker-live .4s steps(2,end) infinite; }
+.altar-actions .primary-action.rapid-active::after { content:""; position:absolute; inset:2px; border:1px solid rgba(255,215,164,.1); pointer-events:none; }
+@keyframes rapid-clicker-arm { 0%{width:0;opacity:.28} 65%{opacity:.58} 100%{width:100%;opacity:1} }
+@keyframes rapid-clicker-live { 0%{opacity:.35;transform:translateX(-2px)} 100%{opacity:1;transform:translateX(3px)} }

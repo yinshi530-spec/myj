@@ -724,6 +724,7 @@ export default function Home() {
   const [levels, setLevels] = useState<Record<string, number>>(initialLevels);
   const [targetLevels, setTargetLevels] = useState<Record<string, number>>({ ...autoTargetInstanceLimits });
   const [autoTargetRun, setAutoTargetRun] = useState<AutoTargetRun | null>(null);
+  const [rapidClickerItemId, setRapidClickerItemId] = useState<string | null>(null);
   const [attemptCount, setAttemptCount] = useState(1);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [isRolling, setIsRolling] = useState(false);
@@ -733,6 +734,10 @@ export default function Home() {
   const pendingForgeTimer = useRef<number | null>(null);
   const autoTargetTimer = useRef<number | null>(null);
   const autoTargetTick = useRef<() => void>(() => undefined);
+  const rapidClickerTimer = useRef<number | null>(null);
+  const rapidClickerTick = useRef<() => void>(() => undefined);
+  const rapidClickerHoldTimer = useRef<number | null>(null);
+  const rapidClickerHoldTriggered = useRef(false);
   const [guardianProtection, setGuardianProtection] = useState(false);
   const [costLedger, setCostLedger] = useState({ knownSpend: 0, pricedAttempts: 0, itemSpend: {} as Record<string, number> });
   const [hasHydrated, setHasHydrated] = useState(false);
@@ -971,6 +976,8 @@ export default function Home() {
   useEffect(() => () => {
     if (pendingForgeTimer.current !== null) window.clearTimeout(pendingForgeTimer.current);
     if (autoTargetTimer.current !== null) window.clearTimeout(autoTargetTimer.current);
+    if (rapidClickerTimer.current !== null) window.clearInterval(rapidClickerTimer.current);
+    if (rapidClickerHoldTimer.current !== null) window.clearTimeout(rapidClickerHoldTimer.current);
     if (guardianAutoTimer.current !== null) window.clearTimeout(guardianAutoTimer.current);
     if (fundNoticeTimer.current !== null) window.clearTimeout(fundNoticeTimer.current);
   }, []);
@@ -1093,6 +1100,7 @@ export default function Home() {
 
   function chooseItem(next: ItemInstance) {
     stopAutoTargetRun();
+    stopRapidClicker();
     setSelectedId(next.id);
     setLastAttempt(null);
     setResultFeedbacks([]);
@@ -1237,12 +1245,70 @@ export default function Home() {
     setAutoTargetRun(null);
   }
 
+  function stopRapidClicker() {
+    if (rapidClickerTimer.current !== null) {
+      window.clearInterval(rapidClickerTimer.current);
+      rapidClickerTimer.current = null;
+    }
+    if (rapidClickerHoldTimer.current !== null) {
+      window.clearTimeout(rapidClickerHoldTimer.current);
+      rapidClickerHoldTimer.current = null;
+    }
+    setRapidClickerItemId(null);
+  }
+
+  function startRapidClicker() {
+    if (!canForge || !canAffordAttempt || isRolling || isAutoTargetRunning || rapidClickerItemId !== null) return;
+    stopAutoTargetRun();
+    setRapidClickerItemId(itemKey);
+    showFundNotice('连点器已启动 · 0.2秒 / 次');
+    simulate(1, true);
+  }
+
+  function beginRapidClickerHold() {
+    rapidClickerHoldTriggered.current = false;
+    if (!canForge || !canAffordAttempt || isRolling || isAutoTargetRunning || rapidClickerItemId !== null) return;
+    if (rapidClickerHoldTimer.current !== null) window.clearTimeout(rapidClickerHoldTimer.current);
+    rapidClickerHoldTimer.current = window.setTimeout(() => {
+      rapidClickerHoldTimer.current = null;
+      rapidClickerHoldTriggered.current = true;
+      startRapidClicker();
+    }, 10000);
+  }
+
+  function cancelRapidClickerHold() {
+    if (rapidClickerHoldTimer.current === null) return;
+    window.clearTimeout(rapidClickerHoldTimer.current);
+    rapidClickerHoldTimer.current = null;
+  }
+
+  function releaseRapidClickerHold() {
+    cancelRapidClickerHold();
+    window.setTimeout(() => {
+      rapidClickerHoldTriggered.current = false;
+    }, 0);
+  }
+
+  function handlePrimaryActionClick() {
+    cancelRapidClickerHold();
+    if (rapidClickerHoldTriggered.current) {
+      rapidClickerHoldTriggered.current = false;
+      return;
+    }
+    if (rapidClickerItemId === itemKey) {
+      stopRapidClicker();
+      showFundNotice('连点器已停止');
+      return;
+    }
+    simulate(1);
+  }
+
   function toggleAutoTargetRun() {
     if (isAutoTargetRunning) {
       stopAutoTargetRun();
       return;
     }
-    if (targetLevel === null || level >= targetLevel || isRolling) return;
+    if (targetLevel === null || level >= targetLevel || isRolling || rapidClickerItemId !== null) return;
     setAutoTargetRun({ itemId: itemKey, target: targetLevel });
     simulate(1, true);
   }
@@ -1269,6 +1335,17 @@ export default function Home() {
       }
     };
   }, [autoTargetRun, levels, selectedId]);
+
+  useEffect(() => {
+    if (rapidClickerItemId === null) return;
+    rapidClickerTimer.current = window.setInterval(() => rapidClickerTick.current(), 200);
+    return () => {
+      if (rapidClickerTimer.current !== null) {
+        window.clearInterval(rapidClickerTimer.current);
+        rapidClickerTimer.current = null;
+      }
+    };
+  }, [rapidClickerItemId]);
 
   function saveGraduationPosterFile(file: File) {
     const objectUrl = window.URL.createObjectURL(file);
@@ -1490,6 +1567,7 @@ export default function Home() {
 
   function restartSession() {
     stopAutoTargetRun();
+    stopRapidClicker();
     stopGuardianAutoRefresh();
     if (pendingForgeTimer.current !== null) {
       window.clearTimeout(pendingForgeTimer.current);
@@ -1544,6 +1622,7 @@ export default function Home() {
   const guardianProtectionEnabled = item.id === 'guardian-star' && guardianProtection;
   const attemptUnitCost = unitCost === null ? null : unitCost + (guardianProtectionEnabled ? guardianProtectionCost : 0);
   const canAffordAttempt = fundHasHydrated && (attemptUnitCost === null || fundBalance >= attemptUnitCost);
+  const isRapidClickerRunning = rapidClickerItemId === itemKey;
   const fundCountdown = fundHasHydrated && fundNow ? countdownToNextHour(fundNow) : '--:--';
   const flameScale = 0.62 + (tierProgress / 100) * 0.83;
   const crownScale = 0.78 + (tierProgress / 100) * 0.38;
@@ -1561,12 +1640,30 @@ export default function Home() {
   const feedbackClass = !usesLevelOnlyFeedback && lastAttempt ? `echo-${outcomeStyle(lastAttempt.kind)}` : '';
   const feedbackKey = usesLevelOnlyFeedback ? itemKey : `${itemKey}-${lastAttempt?.id ?? 'idle'}`;
 
+  rapidClickerTick.current = () => {
+    if (rapidClickerItemId !== itemKey || activeSystem !== 'forge') {
+      stopRapidClicker();
+      return;
+    }
+    if (!canForge) {
+      stopRapidClicker();
+      showFundNotice('当前项目已完成，连点停止');
+      return;
+    }
+    if (!canAffordAttempt) {
+      stopRapidClicker();
+      showFundNotice('资金不足，连点停止');
+      return;
+    }
+    simulate(1, true);
+  };
+
   return (
     <main className={`game-forge ${activeSystem === 'guardian' ? 'guardian-system-active' : ''} ${isRolling ? 'is-forging' : ''}`} style={pageTheme}>
       <header className="game-hud compact-hud cost-hud">
         <nav className="system-tabs" aria-label="养成系统">
           <button type="button" className={activeSystem === 'forge' ? 'active' : ''} onClick={() => { stopGuardianAutoRefresh(); setActiveSystem('forge'); }}><i>◇</i><span>装备打造</span></button>
-          <button type="button" className={activeSystem === 'guardian' ? 'active' : ''} onClick={() => setActiveSystem('guardian')}><i>守</i><span>守护技能</span></button>
+          <button type="button" className={activeSystem === 'guardian' ? 'active' : ''} onClick={() => { stopRapidClicker(); setActiveSystem('guardian'); }}><i>守</i><span>守护技能</span></button>
         </nav>
         <div className="hud-cost-only">
           <div className={`hourly-fund ${fundBalance < 1000 ? 'low' : ''}`} title="每个整点重置为 ¥10,000">
@@ -1867,7 +1964,7 @@ export default function Home() {
                       min="1"
                       max={autoTargetLimit}
                       value={targetLevel}
-                      disabled={isAutoTargetRunning}
+                      disabled={isAutoTargetRunning || isRapidClickerRunning}
                       aria-label={`${item.name}自动强化目标等级`}
                       onChange={(event) => {
                         const nextTarget = Math.min(autoTargetLimit, Math.max(1, Math.floor(Number(event.target.value) || 1)));
@@ -1876,13 +1973,13 @@ export default function Home() {
                     />
                     <span>停止</span>
                   </label>
-                  <button type="button" onClick={toggleAutoTargetRun} disabled={!canForge || (!isAutoTargetRunning && (level >= targetLevel || !canAffordAttempt))} title={!canAffordAttempt ? '资金不足，等待整点刷新' : '每 0.2 秒结算一次单次强化'}>
-                    {isAutoTargetRunning ? '停止' : level >= targetLevel ? '已到达' : !canAffordAttempt ? '余额不足' : '执行'}
+                  <button type="button" onClick={toggleAutoTargetRun} disabled={!canForge || rapidClickerItemId !== null || (!isAutoTargetRunning && (level >= targetLevel || !canAffordAttempt))} title={rapidClickerItemId !== null ? '连点器运行中' : !canAffordAttempt ? '资金不足，等待整点刷新' : '每 0.2 秒结算一次单次强化'}>
+                    {rapidClickerItemId !== null ? '连点中' : isAutoTargetRunning ? '停止' : level >= targetLevel ? '已到达' : !canAffordAttempt ? '余额不足' : '执行'}
                   </button>
                 </div>
               )}
-              <button type="button" className="primary-action" onClick={() => simulate(1)} disabled={isRolling || !canForge || isAutoTargetRunning || !canAffordAttempt}>
-                <span>{isAutoTargetRunning ? `自动强化中 · ¥${attemptUnitCost?.toFixed(0) ?? '—'} / 0.2 秒` : isRolling ? '强化中…' : !canForge ? '已经毕业' : !canAffordAttempt ? '资金不足 · 等待整点刷新' : attemptUnitCost !== null ? `${actionLabel} · ¥${attemptUnitCost.toFixed(0)}` : actionLabel}</span>
+              <button type="button" className={`primary-action ${isRapidClickerRunning ? 'rapid-active' : ''}`} onClick={handlePrimaryActionClick} onPointerDown={beginRapidClickerHold} onPointerUp={releaseRapidClickerHold} onPointerCancel={releaseRapidClickerHold} onPointerLeave={releaseRapidClickerHold} onContextMenu={(event) => event.preventDefault()} disabled={isRolling || isAutoTargetRunning || (!isRapidClickerRunning && (!canForge || !canAffordAttempt))}>
+                <span>{isRapidClickerRunning ? `连点中 · ¥${attemptUnitCost?.toFixed(0) ?? '—'} / 0.2 秒 · 点击停止` : isAutoTargetRunning ? `自动强化中 · ¥${attemptUnitCost?.toFixed(0) ?? '—'} / 0.2 秒` : isRolling ? '强化中…' : !canForge ? '已经毕业' : !canAffordAttempt ? '资金不足 · 等待整点刷新' : attemptUnitCost !== null ? `${actionLabel} · ¥${attemptUnitCost.toFixed(0)}` : actionLabel}</span>
               </button>
             </div>
           </div>
