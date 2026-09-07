@@ -160,10 +160,66 @@ type GachaContainer = {
   items: GachaLoot[];
 };
 
+type LuckyItem = {
+  id: string;
+  name: string;
+  icon: string;
+  sellPrice: number;
+  rarity: GachaRarity;
+  container?: 'zodiac';
+};
+
+type LuckyReward = {
+  itemId: string;
+  min: number;
+  max: number;
+};
+
+type LuckyChanceRow = {
+  id: string;
+  probability: number;
+  rewards: LuckyReward[];
+};
+
+type LuckyDrop = {
+  id: number;
+  itemId: string;
+  quantity: number;
+};
+
+type RareAnnouncement = {
+  id: number;
+  icon: string;
+  name: string;
+  eyebrow: string;
+  message: string;
+  tone: 'treasure' | 'celestial';
+};
+
+type ContainerRevealItem = {
+  id: string;
+  name: string;
+  icon: string;
+  rarity: GachaRarity;
+  sellPrice: number;
+  quantity: number;
+};
+
+type ContainerReveal = {
+  id: number;
+  source: 'gacha' | 'zodiac';
+  phase: 'opening' | 'result';
+  containerName: string;
+  containerIcon: string;
+  openCount: number;
+  items: ContainerRevealItem[];
+};
+
 const sessionStorageKey = 'myj-forge-session-v1';
 const guardianStorageKey = 'myj-guardian-skills-v1';
 const fundStorageKey = 'myj-hourly-fund-v1';
 const gachaStorageKey = 'myj-cat-gacha-v1';
+const luckyStorageKey = 'myj-wangwang-pack-v1';
 const hourlyFundAmount = 10000;
 const individualItemsCostModel = 'individual-items-v3' as const;
 const autoTargetLimits: Record<string, number> = { 'burning-gem': 8, 'moon-myth': 9 };
@@ -349,6 +405,103 @@ const gachaContainers: Record<string, GachaContainer> = {
   },
 };
 const gachaLootById = new Map(Object.values(gachaContainers).flatMap((container) => container.items).map((loot) => [loot.id, loot]));
+
+const luckyPackUnitCost = 8;
+const luckyPackBatchSize = 10;
+const luckyItems: LuckyItem[] = [
+  { id: 'lucky-perfect-jade', name: '完璧宝玉', icon: '🔮', sellPrice: 5, rarity: 'rare' },
+  { id: 'lucky-upgrade-stone', name: '升级石', icon: '🪨', sellPrice: 0.1, rarity: 'common' },
+  { id: 'lucky-vitality-element', name: '体力元素LV3', icon: '❤️', sellPrice: 0.1, rarity: 'common' },
+  { id: 'lucky-intelligence-element', name: '智力元素LV3', icon: '💧', sellPrice: 0.1, rarity: 'common' },
+  { id: 'lucky-strength-element', name: '力量元素LV3', icon: '🔥', sellPrice: 0.1, rarity: 'common' },
+  { id: 'lucky-drill', name: '钻孔器', icon: '🔩', sellPrice: 0.1, rarity: 'common' },
+  { id: 'lucky-solvent', name: '元素溶剂', icon: '🧪', sellPrice: 0.1, rarity: 'common' },
+  { id: 'lucky-training-card', name: '练功房门卡', icon: '🎫', sellPrice: 1, rarity: 'common' },
+  { id: 'lucky-pouch', name: '锦囊', icon: '🧧', sellPrice: 1, rarity: 'common' },
+  { id: 'lucky-short-blessing', name: '短效赐福光环', icon: '⭕', sellPrice: 0.1, rarity: 'common' },
+  { id: 'lucky-moon-goddess-blessing', name: '月神赐福光环', icon: '🌙', sellPrice: 0.1, rarity: 'common' },
+  { id: 'lucky-moonlight-blessing', name: '月光的祝福', icon: '✨', sellPrice: 0.1, rarity: 'common' },
+  { id: 'lucky-whetstone', name: '强力磨刀石', icon: '⚔️', sellPrice: 0.1, rarity: 'common' },
+  { id: 'lucky-ultra-soul', name: '超绝魂魄之精', icon: '👻', sellPrice: 0.1, rarity: 'common' },
+  { id: 'lucky-soul-injection-4', name: '灵魂之注（Lv4）', icon: '🟣', sellPrice: 0.1, rarity: 'common' },
+  { id: 'lucky-soul-injection-3', name: '灵魂之注（Lv3）', icon: '🔵', sellPrice: 0.1, rarity: 'common' },
+  { id: 'lucky-soul-injection-2', name: '灵魂之注（Lv2）', icon: '🟢', sellPrice: 0.1, rarity: 'common' },
+  { id: 'lucky-magic-spring-4', name: '魔法之泉（Lv4）', icon: '💜', sellPrice: 0.1, rarity: 'common' },
+  { id: 'lucky-magic-spring-3', name: '魔法之泉（Lv3）', icon: '💙', sellPrice: 0.1, rarity: 'common' },
+  { id: 'lucky-magic-spring-2', name: '魔法之泉（Lv2）', icon: '💚', sellPrice: 0.1, rarity: 'common' },
+  { id: 'lucky-moonlight-3', name: '月光的祝福Lv3', icon: '🌕', sellPrice: 0.1, rarity: 'common' },
+  { id: 'lucky-moonlight-2', name: '月光的祝福Lv2', icon: '🌓', sellPrice: 0.1, rarity: 'common' },
+  { id: 'lucky-spirit-potion', name: '极效精神药剂', icon: '🧴', sellPrice: 0.1, rarity: 'common' },
+  { id: 'lucky-fearless-power', name: '无畏之力', icon: '🛡️', sellPrice: 1, rarity: 'common' },
+  { id: 'lucky-annihilation-power', name: '湮灭之力', icon: '🌑', sellPrice: 1, rarity: 'common' },
+  { id: 'lucky-pet-roulette', name: '宠物转转蛋', icon: '🎰', sellPrice: 1, rarity: 'common' },
+  { id: 'lucky-monster-summon-3', name: '魔物召唤符（Lv3）', icon: '👹', sellPrice: 10, rarity: 'epic' },
+  { id: 'lucky-blood-knight', name: '血骑士召唤符', icon: '⚔️', sellPrice: 10, rarity: 'epic' },
+  { id: 'lucky-skill-book-3', name: '技能经验书III', icon: '📕', sellPrice: 1, rarity: 'common' },
+  { id: 'lucky-outfit-pack', name: '灵纹换装包', icon: '👘', sellPrice: 5, rarity: 'rare' },
+  { id: 'lucky-zodiac-egg', name: '生肖彩蛋', icon: '🥚', sellPrice: 80, rarity: 'legendary', container: 'zodiac' },
+  { id: 'lucky-phoenix-baby', name: '凤凰宝宝', icon: '🐣', sellPrice: 300, rarity: 'mythic' },
+  { id: 'lucky-gem-accessory-charm', name: '高级宝石配饰符', icon: '💎', sellPrice: 5, rarity: 'rare' },
+  { id: 'lucky-new-summon-pill', name: '新召唤神丹', icon: '🔴', sellPrice: 50, rarity: 'legendary' },
+];
+
+const luckyChanceRows: LuckyChanceRow[] = [
+  { id: 'perfect-jade', probability: 5, rewards: [{ itemId: 'lucky-perfect-jade', min: 1, max: 2 }, { itemId: 'lucky-upgrade-stone', min: 1, max: 5 }] },
+  { id: 'vitality-element', probability: 3, rewards: [{ itemId: 'lucky-vitality-element', min: 1, max: 3 }, { itemId: 'lucky-drill', min: 3, max: 4 }] },
+  { id: 'intelligence-element', probability: 3, rewards: [{ itemId: 'lucky-intelligence-element', min: 1, max: 3 }, { itemId: 'lucky-drill', min: 3, max: 4 }] },
+  { id: 'strength-element', probability: 3, rewards: [{ itemId: 'lucky-strength-element', min: 1, max: 3 }, { itemId: 'lucky-drill', min: 3, max: 4 }] },
+  { id: 'drill-solvent', probability: 5, rewards: [{ itemId: 'lucky-drill', min: 1, max: 3 }, { itemId: 'lucky-solvent', min: 3, max: 4 }] },
+  { id: 'training-card', probability: 5, rewards: [{ itemId: 'lucky-training-card', min: 10, max: 12 }] },
+  { id: 'pouch', probability: 5, rewards: [{ itemId: 'lucky-pouch', min: 10, max: 12 }] },
+  { id: 'short-blessing', probability: 5, rewards: [{ itemId: 'lucky-short-blessing', min: 12, max: 20 }] },
+  { id: 'moon-goddess-blessing', probability: 5, rewards: [{ itemId: 'lucky-moon-goddess-blessing', min: 3, max: 5 }] },
+  { id: 'moonlight-whetstone', probability: 5, rewards: [{ itemId: 'lucky-moonlight-blessing', min: 3, max: 5 }, { itemId: 'lucky-whetstone', min: 3, max: 5 }] },
+  { id: 'ultra-soul', probability: 5, rewards: [{ itemId: 'lucky-ultra-soul', min: 2, max: 3 }, { itemId: 'lucky-short-blessing', min: 2, max: 4 }] },
+  { id: 'soul-4-spring-2', probability: 5, rewards: [{ itemId: 'lucky-soul-injection-4', min: 1, max: 1 }, { itemId: 'lucky-magic-spring-2', min: 1, max: 1 }] },
+  { id: 'spring-4-soul-2', probability: 5, rewards: [{ itemId: 'lucky-magic-spring-4', min: 1, max: 1 }, { itemId: 'lucky-soul-injection-2', min: 1, max: 1 }] },
+  { id: 'moonlight-levels', probability: 5, rewards: [{ itemId: 'lucky-moonlight-3', min: 1, max: 1 }, { itemId: 'lucky-moonlight-2', min: 1, max: 1 }, { itemId: 'lucky-moonlight-blessing', min: 1, max: 1 }] },
+  { id: 'soul-3-spring-2', probability: 5, rewards: [{ itemId: 'lucky-soul-injection-3', min: 1, max: 1 }, { itemId: 'lucky-magic-spring-2', min: 2, max: 2 }] },
+  { id: 'spring-3-soul-2', probability: 5, rewards: [{ itemId: 'lucky-magic-spring-3', min: 1, max: 1 }, { itemId: 'lucky-soul-injection-2', min: 2, max: 2 }] },
+  { id: 'spirit-potion', probability: 5, rewards: [{ itemId: 'lucky-spirit-potion', min: 1, max: 1 }] },
+  { id: 'fearless-power', probability: 3, rewards: [{ itemId: 'lucky-fearless-power', min: 1, max: 1 }] },
+  { id: 'annihilation-power', probability: 3, rewards: [{ itemId: 'lucky-annihilation-power', min: 1, max: 1 }] },
+  { id: 'pet-roulette', probability: 2, rewards: [{ itemId: 'lucky-pet-roulette', min: 3, max: 5 }] },
+  { id: 'monster-summon', probability: 1, rewards: [{ itemId: 'lucky-monster-summon-3', min: 1, max: 1 }] },
+  { id: 'blood-knight', probability: 1, rewards: [{ itemId: 'lucky-blood-knight', min: 1, max: 1 }] },
+  { id: 'skill-book', probability: 3, rewards: [{ itemId: 'lucky-skill-book-3', min: 3, max: 5 }] },
+  { id: 'outfit-pack', probability: 5, rewards: [{ itemId: 'lucky-outfit-pack', min: 1, max: 1 }] },
+  { id: 'zodiac-egg', probability: 6, rewards: [{ itemId: 'lucky-zodiac-egg', min: 1, max: 1 }] },
+  { id: 'phoenix-baby', probability: 1, rewards: [{ itemId: 'lucky-phoenix-baby', min: 1, max: 1 }] },
+  { id: 'gem-accessory-charm', probability: 15, rewards: [{ itemId: 'lucky-gem-accessory-charm', min: 1, max: 1 }] },
+  { id: 'new-summon-pill', probability: 0.3, rewards: [{ itemId: 'lucky-new-summon-pill', min: 1, max: 1 }] },
+];
+
+const zodiacItems: Array<LuckyItem & { probability: number; celestial?: boolean }> = [
+  { id: 'zodiac-rat', name: '生肖·子鼠', icon: '🐭', sellPrice: 40, rarity: 'rare', probability: 8.25 },
+  { id: 'zodiac-ox', name: '生肖·丑牛', icon: '🐮', sellPrice: 45, rarity: 'rare', probability: 8.25 },
+  { id: 'zodiac-tiger', name: '生肖·寅虎', icon: '🐯', sellPrice: 60, rarity: 'rare', probability: 8.25 },
+  { id: 'zodiac-rabbit', name: '生肖·卯兔', icon: '🐰', sellPrice: 50, rarity: 'rare', probability: 8.25 },
+  { id: 'zodiac-dragon', name: '生肖·辰龙', icon: '🐲', sellPrice: 100, rarity: 'legendary', probability: 8.25 },
+  { id: 'zodiac-snake', name: '生肖·巳蛇', icon: '🐍', sellPrice: 55, rarity: 'rare', probability: 8.25 },
+  { id: 'zodiac-horse', name: '生肖·午马', icon: '🐴', sellPrice: 70, rarity: 'rare', probability: 8.25 },
+  { id: 'zodiac-goat', name: '生肖·未羊', icon: '🐏', sellPrice: 50, rarity: 'rare', probability: 8.25 },
+  { id: 'zodiac-monkey', name: '生肖·申猴', icon: '🐒', sellPrice: 65, rarity: 'rare', probability: 8.25 },
+  { id: 'zodiac-rooster', name: '生肖·酉鸡', icon: '🐓', sellPrice: 45, rarity: 'rare', probability: 8.25 },
+  { id: 'zodiac-dog', name: '生肖·戌狗', icon: '🐕', sellPrice: 60, rarity: 'rare', probability: 8.25 },
+  { id: 'zodiac-pig', name: '生肖·亥猪', icon: '🐷', sellPrice: 40, rarity: 'rare', probability: 8.25 },
+  { id: 'zodiac-golden-dragon', name: '天命·金龙', icon: '🐉', sellPrice: 3000, rarity: 'mythic', probability: 0.5, celestial: true },
+  { id: 'zodiac-phoenix', name: '天命·凤凰', icon: '🦅', sellPrice: 3000, rarity: 'mythic', probability: 0.5, celestial: true },
+];
+
+const luckyItemById = new Map([...luckyItems, ...zodiacItems].map((item) => [item.id, item]));
+
+function randomQuantity(min: number, max: number) {
+  return min + Math.floor(randomUnit() * (max - min + 1));
+}
+
+function formatMoney(value: number) {
+  return value.toLocaleString('zh-CN', { minimumFractionDigits: Number.isInteger(value) ? 0 : 1, maximumFractionDigits: 1 });
+}
 
 function randomUnit() {
   if (typeof globalThis.crypto?.getRandomValues === 'function') {
@@ -873,7 +1026,7 @@ function levelPalette(item: ProbabilityItem, level: number) {
 
 export default function Home() {
   const initialLevels = useMemo(() => Object.fromEntries(itemInstances.filter((instance) => instance.item.mode !== 'draw').map((instance) => [instance.id, instance.item.minLevel ?? 0])), []);
-  const [activeSystem, setActiveSystem] = useState<'forge' | 'guardian' | 'gacha'>('forge');
+  const [activeSystem, setActiveSystem] = useState<'forge' | 'guardian' | 'gacha' | 'lucky'>('forge');
   const [selectedId, setSelectedId] = useState(itemInstances[0].id);
   const [levels, setLevels] = useState<Record<string, number>>(initialLevels);
   const [targetLevels, setTargetLevels] = useState<Record<string, number>>({ ...autoTargetInstanceLimits });
@@ -926,6 +1079,20 @@ export default function Home() {
   const [gachaRolling, setGachaRolling] = useState(false);
   const [gachaHasHydrated, setGachaHasHydrated] = useState(false);
   const gachaTimer = useRef<number | null>(null);
+  const [luckyInventory, setLuckyInventory] = useState<Record<string, number>>({});
+  const [luckyTotalOpens, setLuckyTotalOpens] = useState(0);
+  const [luckySaleRevenue, setLuckySaleRevenue] = useState(0);
+  const [luckySoldCount, setLuckySoldCount] = useState(0);
+  const [luckyLatest, setLuckyLatest] = useState<LuckyDrop[]>([]);
+  const [luckyRolling, setLuckyRolling] = useState(false);
+  const [luckyOpeningStep, setLuckyOpeningStep] = useState(0);
+  const [luckyActionNotice, setLuckyActionNotice] = useState<string | null>(null);
+  const [luckyHasHydrated, setLuckyHasHydrated] = useState(false);
+  const [rareAnnouncement, setRareAnnouncement] = useState<RareAnnouncement | null>(null);
+  const [containerReveal, setContainerReveal] = useState<ContainerReveal | null>(null);
+  const luckyTimer = useRef<number | null>(null);
+  const rareAnnouncementTimer = useRef<number | null>(null);
+  const containerRevealTimer = useRef<number | null>(null);
   const graduationPosterFile = useRef<File | null>(null);
   const posterBuildSequence = useRef(0);
 
@@ -1106,6 +1273,43 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    try {
+      const rawLucky = window.localStorage.getItem(luckyStorageKey);
+      if (!rawLucky) return;
+      const stored = JSON.parse(rawLucky) as {
+        inventory?: Record<string, number>;
+        totalOpens?: number;
+        saleRevenue?: number;
+        soldCount?: number;
+        latest?: LuckyDrop[];
+      };
+      const restoredInventory: Record<string, number> = {};
+      if (stored.inventory && typeof stored.inventory === 'object') {
+        Object.entries(stored.inventory).forEach(([itemId, count]) => {
+          if (luckyItemById.has(itemId) && typeof count === 'number' && Number.isFinite(count) && count > 0) restoredInventory[itemId] = Math.floor(count);
+        });
+      }
+      setLuckyInventory(restoredInventory);
+      setLuckyTotalOpens(typeof stored.totalOpens === 'number' && Number.isFinite(stored.totalOpens) ? Math.max(0, Math.floor(stored.totalOpens)) : 0);
+      setLuckySaleRevenue(typeof stored.saleRevenue === 'number' && Number.isFinite(stored.saleRevenue) ? Math.max(0, stored.saleRevenue) : 0);
+      setLuckySoldCount(typeof stored.soldCount === 'number' && Number.isFinite(stored.soldCount) ? Math.max(0, Math.floor(stored.soldCount)) : 0);
+      if (Array.isArray(stored.latest)) {
+        setLuckyLatest(stored.latest.filter((drop) => drop
+          && typeof drop.id === 'number'
+          && typeof drop.itemId === 'string'
+          && luckyItemById.has(drop.itemId)
+          && typeof drop.quantity === 'number'
+          && Number.isFinite(drop.quantity)
+          && drop.quantity > 0).slice(0, 20));
+      }
+    } catch (error) {
+      console.warn('旺旺幸运包记录恢复失败:', error);
+    } finally {
+      setLuckyHasHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
     const currentHour = localHourKey();
     let restoredBalance = hourlyFundAmount;
     try {
@@ -1175,6 +1379,21 @@ export default function Home() {
   }, [gachaHasHydrated, gachaHistory, gachaInventory, gachaLootInventory, gachaSaleRevenue, gachaSoldCount, gachaTotalDraws]);
 
   useEffect(() => {
+    if (!luckyHasHydrated) return;
+    try {
+      window.localStorage.setItem(luckyStorageKey, JSON.stringify({
+        inventory: luckyInventory,
+        totalOpens: luckyTotalOpens,
+        saleRevenue: luckySaleRevenue,
+        soldCount: luckySoldCount,
+        latest: luckyLatest,
+      }));
+    } catch (error) {
+      console.warn('旺旺幸运包记录保存失败:', error);
+    }
+  }, [luckyHasHydrated, luckyInventory, luckyLatest, luckySaleRevenue, luckySoldCount, luckyTotalOpens]);
+
+  useEffect(() => {
     if (!fundHasHydrated) return;
     try {
       window.localStorage.setItem(fundStorageKey, JSON.stringify({ balance: fundBalance, hourKey: fundHourKey }));
@@ -1206,6 +1425,9 @@ export default function Home() {
     if (rapidClickerHoldTimer.current !== null) window.clearTimeout(rapidClickerHoldTimer.current);
     if (guardianAutoTimer.current !== null) window.clearTimeout(guardianAutoTimer.current);
     if (gachaTimer.current !== null) window.clearTimeout(gachaTimer.current);
+    if (luckyTimer.current !== null) window.clearTimeout(luckyTimer.current);
+    if (rareAnnouncementTimer.current !== null) window.clearTimeout(rareAnnouncementTimer.current);
+    if (containerRevealTimer.current !== null) window.clearTimeout(containerRevealTimer.current);
     if (fundNoticeTimer.current !== null) window.clearTimeout(fundNoticeTimer.current);
   }, []);
 
@@ -1295,6 +1517,14 @@ export default function Home() {
     return right.sellPrice - left.sellPrice || left.name.localeCompare(right.name, 'zh-CN');
   });
   const gachaSpend = costLedger.itemSpend['cat-gacha'] ?? 0;
+  const luckyBackpackCount = Object.values(luckyInventory).reduce((sum, count) => sum + count, 0);
+  const luckyCollected = Object.keys(luckyInventory).length;
+  const luckySpend = costLedger.itemSpend['wangwang-pack'] ?? 0;
+  const luckyLatestValue = luckyLatest.reduce((sum, drop) => sum + (luckyItemById.get(drop.itemId)?.sellPrice ?? 0) * drop.quantity, 0);
+  const luckyBackpackItems = [...luckyItemById.values()].filter((entry) => (luckyInventory[entry.id] ?? 0) > 0).sort((left, right) => {
+    const rarityOrder: Record<GachaRarity, number> = { mythic: 0, legendary: 1, epic: 2, rare: 3, common: 4 };
+    return rarityOrder[left.rarity] - rarityOrder[right.rarity] || right.sellPrice - left.sellPrice || left.name.localeCompare(right.name, 'zh-CN');
+  });
   const equippedGuardianGroups = guardianResolvedSlots.reduce<Record<string, number>>((counts, slot) => {
     if (slot.skill) counts[slot.skill.groupId] = (counts[slot.skill.groupId] ?? 0) + 1;
     return counts;
@@ -1337,6 +1567,14 @@ export default function Home() {
     unitCost: gachaUnitCost,
     attemptCost: gachaUnitCost,
     spend: gachaSpend,
+  }, {
+    id: 'wangwang-pack',
+    baseItemId: 'wangwang-pack',
+    name: '旺旺幸运包',
+    level: `累计启封 ${luckyTotalOpens} 次`,
+    unitCost: luckyPackUnitCost,
+    attemptCost: luckyPackUnitCost,
+    spend: luckySpend,
   }];
   const categorizedCost = costDetailItems.reduce((sum, entry) => sum + entry.spend, 0);
   const uncategorizedCost = Math.max(0, costLedger.knownSpend - categorizedCost);
@@ -1392,8 +1630,17 @@ export default function Home() {
     const nextBalance = fundBalanceRef.current + safeAmount;
     fundBalanceRef.current = nextBalance;
     setFundBalance(nextBalance);
-    showFundNotice(`卖出到账 ¥${safeAmount.toFixed(0)}`);
+    showFundNotice(`卖出到账 ¥${formatMoney(safeAmount)}`);
     return true;
+  }
+
+  function showRareAnnouncement(announcement: Omit<RareAnnouncement, 'id'>) {
+    if (rareAnnouncementTimer.current !== null) window.clearTimeout(rareAnnouncementTimer.current);
+    setRareAnnouncement({ ...announcement, id: Date.now() });
+    rareAnnouncementTimer.current = window.setTimeout(() => {
+      setRareAnnouncement(null);
+      rareAnnouncementTimer.current = null;
+    }, 4600);
   }
 
   function triggerFundBackdoor() {
@@ -1835,7 +2082,8 @@ export default function Home() {
 
   function drawGacha(count: 1 | 10) {
     const drawCost = count * gachaUnitCost;
-    if (gachaRolling || !gachaHasHydrated || !fundHasHydrated || !spendFromFund(drawCost)) return;
+    if (gachaRolling || containerReveal?.phase === 'opening' || !gachaHasHydrated || !fundHasHydrated || !spendFromFund(drawCost)) return;
+    setContainerReveal(null);
     const drawId = Date.now() * 100;
     const nextPulls = Array.from({ length: count }, (_, index) => ({ id: drawId + index, prizeId: pickGachaPrize().id }));
     setGachaLatest([]);
@@ -1856,25 +2104,78 @@ export default function Home() {
         nextPulls.forEach((pull) => { next[pull.prizeId] = (next[pull.prizeId] ?? 0) + 1; });
         return next;
       });
+      const announcedPrizeId = ['gacha-1', 'gacha-51', 'gacha-2']
+        .find((prizeId) => nextPulls.some((pull) => pull.prizeId === prizeId));
+      if (announcedPrizeId) {
+        const prize = gachaPrizeById.get(announcedPrizeId)!;
+        showRareAnnouncement({
+          icon: prize.icon,
+          name: prize.name,
+          eyebrow: '禁域秘宝 · 全服瞩目',
+          message: '猫猫探险队带回了足以改写旅程的至珍宝物',
+          tone: 'treasure',
+        });
+      }
       setGachaRolling(false);
       gachaTimer.current = null;
     }, count === 1 ? 520 : 760);
   }
 
-  function openGachaContainer(prizeId: string) {
+  function openGachaContainer(prizeId: string, openAll = false) {
     const container = gachaContainers[prizeId];
-    if (!container || (gachaInventory[prizeId] ?? 0) < 1) return;
-    const loot = pickGachaLoot(container);
-    setGachaInventory((current) => {
-      const next = { ...current };
-      const remaining = (next[prizeId] ?? 0) - 1;
-      if (remaining > 0) next[prizeId] = remaining;
-      else delete next[prizeId];
-      return next;
+    const owned = gachaInventory[prizeId] ?? 0;
+    if (!container || owned < 1 || containerReveal?.phase === 'opening') return;
+    setContainerReveal(null);
+    const openCount = openAll ? owned : 1;
+    const openedLoot = Array.from({ length: openCount }, () => pickGachaLoot(container));
+    const revealItems = [...openedLoot.reduce((grouped, loot) => {
+      const current = grouped.get(loot.id);
+      if (current) current.quantity += 1;
+      else grouped.set(loot.id, { id: loot.id, name: loot.name, icon: loot.icon, rarity: loot.rarity, sellPrice: loot.sellPrice, quantity: 1 });
+      return grouped;
+    }, new Map<string, ContainerRevealItem>()).values()].sort((left, right) => {
+      const rarityOrder: Record<GachaRarity, number> = { mythic: 0, legendary: 1, epic: 2, rare: 3, common: 4 };
+      return rarityOrder[left.rarity] - rarityOrder[right.rarity] || right.sellPrice - left.sellPrice;
     });
-    setGachaLootInventory((current) => ({ ...current, [loot.id]: (current[loot.id] ?? 0) + 1 }));
-    setGachaLatestLootId(loot.id);
-    setGachaActionNotice(`已放入背包：${loot.name} ×1 · 可售 ¥${loot.sellPrice}`);
+    const lootKinds = new Set(openedLoot.map((loot) => loot.id)).size;
+    const featuredLoot = openedLoot.find((loot) => loot.id === 'loot-duck-bottle' || loot.id === 'loot-fearless-breastplate') ?? openedLoot[openedLoot.length - 1];
+    const duckCount = openedLoot.filter((loot) => loot.id === 'loot-duck-bottle').length;
+    const breastplateCount = openedLoot.filter((loot) => loot.id === 'loot-fearless-breastplate').length;
+    const sourcePrize = gachaPrizeById.get(prizeId)!;
+    setContainerReveal({ id: Date.now(), source: 'gacha', phase: 'opening', containerName: sourcePrize.name, containerIcon: sourcePrize.icon, openCount, items: revealItems });
+    if (containerRevealTimer.current !== null) window.clearTimeout(containerRevealTimer.current);
+    containerRevealTimer.current = window.setTimeout(() => {
+      setGachaInventory((current) => {
+        const next = { ...current };
+        const remaining = (next[prizeId] ?? 0) - openCount;
+        if (remaining > 0) next[prizeId] = remaining;
+        else delete next[prizeId];
+        return next;
+      });
+      setGachaLootInventory((current) => {
+        const next = { ...current };
+        openedLoot.forEach((loot) => { next[loot.id] = (next[loot.id] ?? 0) + 1; });
+        return next;
+      });
+      setGachaLatestLootId(featuredLoot.id);
+      setGachaActionNotice(openCount === 1
+        ? `已放入背包：${featuredLoot.name} ×1 · 可售 ¥${featuredLoot.sellPrice}`
+        : `连续开启 ${openCount} 个容器 · 获得 ${lootKinds} 种战利品，已全部入包`);
+      setContainerReveal((current) => current ? { ...current, phase: 'result' } : current);
+      if (duckCount > 0 || breastplateCount > 0) {
+        containerRevealTimer.current = window.setTimeout(() => {
+          setContainerReveal(null);
+          if (duckCount > 0) {
+            showRareAnnouncement({ icon: '🐥', name: '瓶子里的小鸭子', eyebrow: '怪爷爷秘藏 · 奇珍现世', message: duckCount > 1 ? `封存于瓶中的传奇小鸭子，本次一共游来 ${duckCount} 只` : '封存于瓶中的传奇小鸭子，已经游进你的宝物背包', tone: 'treasure' });
+          } else {
+            showRareAnnouncement({ icon: '🛡️', name: '无畏胸甲', eyebrow: '血骑士遗珍 · 无畏降临', message: breastplateCount > 1 ? `猩红战意席卷秘境，本次共获得 ${breastplateCount} 件无畏胸甲` : '猩红战意扑面而来，无畏胸甲已归入你的战利品', tone: 'treasure' });
+          }
+          containerRevealTimer.current = null;
+        }, 650);
+      } else {
+        containerRevealTimer.current = null;
+      }
+    }, 620);
   }
 
   function sellGachaItem(source: 'prize' | 'loot', itemId: string, sellAll: boolean) {
@@ -1899,6 +2200,140 @@ export default function Home() {
     setGachaActionNotice(`卖出 ${itemName ?? '物品'} ×${quantity} · 到账 ¥${unitPrice * quantity}`);
   }
 
+  function openLuckyPack() {
+    const batchCost = luckyPackUnitCost * luckyPackBatchSize;
+    if (luckyRolling || containerReveal?.phase === 'opening' || !luckyHasHydrated || !fundHasHydrated || !spendFromFund(batchCost)) return;
+    setContainerReveal(null);
+    const openedAt = Date.now() * 100;
+    const drops: LuckyDrop[] = [];
+    Array.from({ length: luckyPackBatchSize }, (_, packIndex) => {
+      luckyChanceRows.forEach((row, rowIndex) => {
+        if (randomUnit() * 100 >= row.probability) return;
+        row.rewards.forEach((reward, rewardIndex) => {
+          drops.push({
+            id: openedAt + packIndex * 1000 + rowIndex * 10 + rewardIndex,
+            itemId: reward.itemId,
+            quantity: randomQuantity(reward.min, reward.max),
+          });
+        });
+      });
+    });
+    const mergedDrops = [...drops.reduce((merged, drop) => {
+      const existing = merged.get(drop.itemId);
+      if (existing) existing.quantity += drop.quantity;
+      else merged.set(drop.itemId, { ...drop });
+      return merged;
+    }, new Map<string, LuckyDrop>()).values()].sort((left, right) => {
+      const rarityOrder: Record<GachaRarity, number> = { mythic: 0, legendary: 1, epic: 2, rare: 3, common: 4 };
+      const leftItem = luckyItemById.get(left.itemId)!;
+      const rightItem = luckyItemById.get(right.itemId)!;
+      return rarityOrder[leftItem.rarity] - rarityOrder[rightItem.rarity] || rightItem.sellPrice - leftItem.sellPrice || leftItem.name.localeCompare(rightItem.name, 'zh-CN');
+    });
+    setLuckyLatest([]);
+    setLuckyActionNotice(null);
+    setLuckyRolling(true);
+    setLuckyOpeningStep(0);
+    setLuckyTotalOpens((current) => current + luckyPackBatchSize);
+    setCostLedger((current) => ({
+      knownSpend: current.knownSpend + batchCost,
+      pricedAttempts: current.pricedAttempts + luckyPackBatchSize,
+      itemSpend: { ...current.itemSpend, 'wangwang-pack': (current.itemSpend['wangwang-pack'] ?? 0) + batchCost },
+    }));
+    const finishOpening = () => {
+      setLuckyLatest(mergedDrops);
+      if (mergedDrops.length) {
+        setLuckyInventory((current) => {
+          const next = { ...current };
+          mergedDrops.forEach((drop) => { next[drop.itemId] = (next[drop.itemId] ?? 0) + drop.quantity; });
+          return next;
+        });
+        const totalQuantity = mergedDrops.reduce((sum, drop) => sum + drop.quantity, 0);
+        setLuckyActionNotice(`10 包开启完成 · 命中 ${mergedDrops.length} 种 · 共 ${totalQuantity} 件物品`);
+        const phoenixDrop = mergedDrops.find((drop) => drop.itemId === 'lucky-phoenix-baby');
+        if (phoenixDrop) {
+          const phoenix = luckyItemById.get(phoenixDrop.itemId)!;
+          showRareAnnouncement({
+            icon: phoenix.icon,
+            name: phoenix.name,
+            eyebrow: '赤羽临世 · 福运沸腾',
+            message: `旺旺十连迎来凤凰祥瑞，${phoenixDrop.quantity > 1 ? `本次共降临 ${phoenixDrop.quantity} 只` : '珍稀灵宠已进入你的背包'}`,
+            tone: 'treasure',
+          });
+        }
+      } else {
+        setLuckyActionNotice('10 包均未命中任何奖项，幸运值正在积蓄');
+      }
+      setLuckyRolling(false);
+      setLuckyOpeningStep(0);
+      luckyTimer.current = null;
+    };
+    let nextPack = 0;
+    const revealNextPack = () => {
+      nextPack += 1;
+      setLuckyOpeningStep(nextPack);
+      luckyTimer.current = window.setTimeout(nextPack < luckyPackBatchSize ? revealNextPack : finishOpening, nextPack < luckyPackBatchSize ? 90 : 210);
+    };
+    if (luckyTimer.current !== null) window.clearTimeout(luckyTimer.current);
+    luckyTimer.current = window.setTimeout(revealNextPack, 80);
+  }
+
+  function openZodiacEgg() {
+    if (luckyRolling || containerReveal?.phase === 'opening' || (luckyInventory['lucky-zodiac-egg'] ?? 0) < 1) return;
+    setContainerReveal(null);
+    let roll = randomUnit() * 100;
+    let result = zodiacItems[zodiacItems.length - 1];
+    for (const item of zodiacItems) {
+      roll -= item.probability;
+      if (roll < 0) {
+        result = item;
+        break;
+      }
+    }
+    setContainerReveal({ id: Date.now(), source: 'zodiac', phase: 'opening', containerName: '生肖彩蛋', containerIcon: '🥚', openCount: 1, items: [{ id: result.id, name: result.name, icon: result.icon, rarity: result.rarity, sellPrice: result.sellPrice, quantity: 1 }] });
+    if (containerRevealTimer.current !== null) window.clearTimeout(containerRevealTimer.current);
+    containerRevealTimer.current = window.setTimeout(() => {
+      setLuckyInventory((current) => {
+        const next = { ...current };
+        const eggsLeft = (next['lucky-zodiac-egg'] ?? 0) - 1;
+        if (eggsLeft > 0) next['lucky-zodiac-egg'] = eggsLeft;
+        else delete next['lucky-zodiac-egg'];
+        next[result.id] = (next[result.id] ?? 0) + 1;
+        return next;
+      });
+      setLuckyLatest([{ id: Date.now(), itemId: result.id, quantity: 1 }]);
+      setLuckyActionNotice(`生肖彩蛋开启：${result.name} ×1 · 可售 ¥${formatMoney(result.sellPrice)}`);
+      setContainerReveal((current) => current ? { ...current, phase: 'result' } : current);
+      if (result.celestial) {
+        containerRevealTimer.current = window.setTimeout(() => {
+          setContainerReveal(null);
+          showRareAnnouncement({ icon: result.icon, name: result.name, eyebrow: '天命显现 · 万象共鸣', message: '祥瑞撕裂夜幕，传说灵兽已降临你的背包', tone: 'celestial' });
+          containerRevealTimer.current = null;
+        }, 650);
+      } else {
+        containerRevealTimer.current = null;
+      }
+    }, 620);
+  }
+
+  function sellLuckyItem(itemId: string, sellAll: boolean) {
+    const item = luckyItemById.get(itemId);
+    const owned = luckyInventory[itemId] ?? 0;
+    if (!item || !owned) return;
+    const quantity = sellAll ? owned : 1;
+    const revenue = item.sellPrice * quantity;
+    if (!creditFund(revenue)) return;
+    setLuckyInventory((current) => {
+      const next = { ...current };
+      const remaining = (next[itemId] ?? 0) - quantity;
+      if (remaining > 0) next[itemId] = remaining;
+      else delete next[itemId];
+      return next;
+    });
+    setLuckySaleRevenue((current) => current + revenue);
+    setLuckySoldCount((current) => current + quantity);
+    setLuckyActionNotice(`卖出 ${item.name} ×${quantity} · 到账 ¥${formatMoney(revenue)}`);
+  }
+
   function restartSession() {
     stopAutoTargetRun();
     stopRapidClicker();
@@ -1911,10 +2346,23 @@ export default function Home() {
       window.clearTimeout(gachaTimer.current);
       gachaTimer.current = null;
     }
+    if (luckyTimer.current !== null) {
+      window.clearTimeout(luckyTimer.current);
+      luckyTimer.current = null;
+    }
+    if (rareAnnouncementTimer.current !== null) {
+      window.clearTimeout(rareAnnouncementTimer.current);
+      rareAnnouncementTimer.current = null;
+    }
+    if (containerRevealTimer.current !== null) {
+      window.clearTimeout(containerRevealTimer.current);
+      containerRevealTimer.current = null;
+    }
     window.localStorage.removeItem(sessionStorageKey);
     window.localStorage.removeItem(guardianStorageKey);
-    window.localStorage.removeItem(fundStorageKey);
     window.localStorage.removeItem(gachaStorageKey);
+    window.localStorage.removeItem(luckyStorageKey);
+    window.localStorage.removeItem(fundStorageKey);
     feedbackSequence.current = 0;
     posterBuildSequence.current += 1;
     graduationPosterFile.current = null;
@@ -1943,6 +2391,16 @@ export default function Home() {
     setGachaLatestLootId(null);
     setGachaLatest([]);
     setGachaRolling(false);
+    setLuckyInventory({});
+    setLuckyTotalOpens(0);
+    setLuckySaleRevenue(0);
+    setLuckySoldCount(0);
+    setLuckyLatest([]);
+    setLuckyRolling(false);
+    setLuckyOpeningStep(0);
+    setLuckyActionNotice(null);
+    setRareAnnouncement(null);
+    setContainerReveal(null);
     setCostLedger({ knownSpend: 0, pricedAttempts: 0, itemSpend: {} });
     const currentHour = localHourKey();
     fundBalanceRef.current = hourlyFundAmount;
@@ -1960,7 +2418,9 @@ export default function Home() {
     ? { '--accent': '#65d3ac', '--accent-soft': '#153a30' } as CSSProperties
     : activeSystem === 'gacha'
       ? { '--accent': '#ffbd6d', '--accent-soft': '#4a2925' } as CSSProperties
-      : theme;
+      : activeSystem === 'lucky'
+        ? { '--accent': '#ffcf62', '--accent-soft': '#5a1718' } as CSSProperties
+        : theme;
   const maxSelectable = item.maxLevel ?? item.minLevel ?? 0;
   const canForge = item.mode === 'draw' || outcomes.length > 0;
   const actionLabel = item.mode === 'draw' ? '唤醒图腾' : item.mode === 'check' ? '进行祈愿' : item.mode === 'adaptive' ? '点亮星辰' : '开始强化';
@@ -2010,17 +2470,18 @@ export default function Home() {
   };
 
   return (
-    <main className={`game-forge ${activeSystem === 'guardian' ? 'guardian-system-active' : ''} ${activeSystem === 'gacha' ? 'gacha-system-active' : ''} ${isRolling ? 'is-forging' : ''}`} style={pageTheme}>
+    <main className={`game-forge ${activeSystem === 'guardian' ? 'guardian-system-active' : ''} ${activeSystem === 'gacha' ? 'gacha-system-active' : ''} ${activeSystem === 'lucky' ? 'lucky-system-active' : ''} ${isRolling ? 'is-forging' : ''}`} style={pageTheme}>
       <header className="game-hud compact-hud cost-hud">
         <nav className="system-tabs" aria-label="养成系统">
           <button type="button" className={activeSystem === 'forge' ? 'active' : ''} onClick={() => { stopGuardianAutoRefresh(); setActiveSystem('forge'); }}><i>◇</i><span>装备打造</span></button>
           <button type="button" className={activeSystem === 'guardian' ? 'active' : ''} onClick={() => { stopRapidClicker(); setActiveSystem('guardian'); }}><i>守</i><span>守护技能</span></button>
           <button type="button" className={activeSystem === 'gacha' ? 'active' : ''} onClick={() => { stopRapidClicker(); stopGuardianAutoRefresh(); setActiveSystem('gacha'); }}><i>寻</i><span>猫猫寻宝</span></button>
+          <button type="button" className={activeSystem === 'lucky' ? 'active' : ''} onClick={() => { stopRapidClicker(); stopGuardianAutoRefresh(); setActiveSystem('lucky'); }}><i>旺</i><span>旺旺幸运包</span></button>
         </nav>
         <div className="hud-cost-only">
           <div className={`hourly-fund ${fundBalance < 1000 ? 'low' : ''}`} title="每个整点重置为 ¥10,000">
             <span><i />整点资金池</span>
-            <b>¥{fundBalance.toLocaleString('zh-CN', { maximumFractionDigits: 0 })}</b>
+            <b>¥{fundBalance.toLocaleString('zh-CN', { minimumFractionDigits: Number.isInteger(fundBalance) ? 0 : 1, maximumFractionDigits: 1 })}</b>
             <small aria-live="polite">{fundNotice ?? `距刷新 ${fundCountdown}`}</small>
           </div>
           <span>已知累计花费</span>
@@ -2473,7 +2934,13 @@ export default function Home() {
           </div>
 
           <div className={`gacha-reveal ${gachaRolling ? 'rolling' : ''}`} aria-live="polite">
-            {gachaRolling ? <div className="gacha-opening"><i /><i /><i /><b>猫猫探险队正在深入遗迹…</b></div> : !gachaLatest.length ? <div className="gacha-awaiting"><i>✦</i><b>等待开启第一张藏宝图</b><small>单次探索与十次远征使用相同的完整宝物池</small></div> : <div className={`gacha-result-grid count-${gachaLatest.length}`}>{gachaLatest.map((pull, index) => {
+            {containerReveal?.source === 'gacha' ? containerReveal.phase === 'opening'
+              ? <div className="gacha-opening container-opening-main"><i>{containerReveal.containerIcon}</i><i /><i /><b>正在开启{containerReveal.containerName}…</b><small>{containerReveal.openCount > 1 ? `连续开启 ${containerReveal.openCount} 个` : '正在破除封印'}</small></div>
+              : <div className="main-container-result"><header><span>容器开启结果</span><b>{containerReveal.items.length} 种 · 总售价 ¥{formatMoney(containerReveal.items.reduce((sum, item) => sum + item.sellPrice * item.quantity, 0))}</b></header><div>{containerReveal.items.map((item, index) => {
+                const meta = gachaRarityMeta[item.rarity];
+                return <article key={item.id} style={{ '--reveal-color': meta.color, '--container-delay': `${index * 45}ms` } as CSSProperties}><i>{item.icon}</i><span><b>{item.name}</b><small>{meta.name} · ¥{formatMoney(item.sellPrice)}/件</small></span><strong>×{item.quantity}</strong></article>;
+              })}</div></div>
+              : gachaRolling ? <div className="gacha-opening"><i /><i /><i /><b>猫猫探险队正在深入遗迹…</b></div> : !gachaLatest.length ? <div className="gacha-awaiting"><i>✦</i><b>等待开启第一张藏宝图</b><small>单次探索与十次远征使用相同的完整宝物池</small></div> : <div className={`gacha-result-grid count-${gachaLatest.length}`}>{gachaLatest.map((pull, index) => {
               const prize = gachaPrizeById.get(pull.prizeId)!;
               const meta = gachaRarityMeta[prize.rarity];
               return <article key={pull.id} className={`rarity-${prize.rarity}`} style={{ '--gacha-color': meta.color, '--reveal-delay': `${index * 45}ms` } as CSSProperties}><span>{meta.short}</span><i>{prize.icon}</i><b>{prize.name}</b><small>{meta.name}宝物</small></article>;
@@ -2504,7 +2971,7 @@ export default function Home() {
             {!gachaBackpackItems.length && !gachaLootBackpackItems.length ? <div className="gacha-history-empty"><i>囊</i><b>探险背包还是空的</b><small>完成寻宝后，获得的物品会自动装入背包</small></div> : <>
             {gachaLootBackpackItems.map((loot) => {
               const meta = gachaRarityMeta[loot.rarity];
-              return <article key={loot.id} className={`rarity-${loot.rarity} loot-card ${loot.id === gachaLatestLootId ? 'new-loot' : ''}`} style={{ '--gacha-color': meta.color } as CSSProperties} title={`${loot.name} · 开箱产物 · 售价 ¥${loot.sellPrice}`}><i>{loot.icon}</i><b>{loot.name}</b><span>{meta.short}</span><em>×{gachaLootInventory[loot.id]}</em><small>已入背包 · 售价 ¥{loot.sellPrice}</small><div><button type="button" onClick={() => sellGachaItem('loot', loot.id, false)}>卖 1</button><button type="button" onClick={() => sellGachaItem('loot', loot.id, true)}>全卖</button></div></article>;
+              return <article key={loot.id} className={`rarity-${loot.rarity} loot-card ${loot.id === gachaLatestLootId ? 'new-loot' : ''}`} style={{ '--gacha-color': meta.color } as CSSProperties} title={`${loot.name} · 开箱产物 · 售价 ¥${loot.sellPrice}`}><i>{loot.icon}</i><span><b>{loot.name}</b><small>{meta.short} · 售价 ¥{loot.sellPrice}</small></span><em>×{gachaLootInventory[loot.id]}</em><div><button type="button" onClick={() => sellGachaItem('loot', loot.id, false)}>卖1</button><button type="button" onClick={() => sellGachaItem('loot', loot.id, true)}>全卖</button></div></article>;
             })}
             {gachaBackpackItems.map((prize) => {
               const meta = gachaRarityMeta[prize.rarity];
@@ -2513,13 +2980,107 @@ export default function Home() {
               const itemTitle = container
                 ? `${prize.name} · 开启奖池\n${container.items.map((loot) => `${loot.icon} ${loot.name} · ¥${loot.sellPrice}`).join('\n')}`
                 : `${prize.name} · ${meta.name} · 售价 ¥${sellPrice}`;
-              return <article key={prize.id} className={`rarity-${prize.rarity} ${container ? 'container-card' : ''}`} style={{ '--gacha-color': meta.color } as CSSProperties} title={itemTitle}><i>{prize.icon}</i><b>{prize.name}</b><span>{meta.short}</span><em>×{gachaInventory[prize.id]}</em><small>{container ? `${container.items.length} 种内容 · 奖池见上方` : `售价 ¥${sellPrice}`}</small><div>{container ? <button type="button" onClick={() => openGachaContainer(prize.id)}>开启 1 个</button> : <><button type="button" onClick={() => sellGachaItem('prize', prize.id, false)}>卖 1</button><button type="button" onClick={() => sellGachaItem('prize', prize.id, true)}>全卖</button></>}</div></article>;
+              return <article key={prize.id} className={`rarity-${prize.rarity} ${container ? 'container-card' : ''}`} style={{ '--gacha-color': meta.color } as CSSProperties} title={itemTitle}><i>{prize.icon}</i><span><b>{prize.name}</b><small>{container ? `${meta.short} · 内含 ${container.items.length} 种宝物` : `${meta.short} · 售价 ¥${sellPrice}`}</small></span><em>×{gachaInventory[prize.id]}</em><div>{container ? <><button type="button" className="open-container" onClick={() => openGachaContainer(prize.id)}>开1</button><button type="button" onClick={() => openGachaContainer(prize.id, true)}>全开</button></> : <><button type="button" onClick={() => sellGachaItem('prize', prize.id, false)}>卖1</button><button type="button" onClick={() => sellGachaItem('prize', prize.id, true)}>全卖</button></>}</div></article>;
             })}
             </>}
           </div>
           <footer className="gacha-record-note"><i>¥</i><span><b>寻宝 ¥2 / 次</b><small>卖出收入返还资金池；容器本体需开启后出售产物。</small></span></footer>
         </aside>
       </section>
+
+      <section className={`lucky-layout ${activeSystem === 'lucky' ? '' : 'system-hidden'}`}>
+        <aside className="lucky-rule-panel">
+          <header className="lucky-panel-heading"><span>FORTUNE PROTOCOL · 28</span><h2>福袋内容录</h2><small>每一行单独判定，命中组合会整组入包</small></header>
+          <div className="lucky-rule-list">
+            {luckyChanceRows.map((row, index) => <article key={row.id}>
+              <i>{String(index + 1).padStart(2, '0')}</i>
+              <span>{row.rewards.map((reward) => {
+                const rewardItem = luckyItemById.get(reward.itemId)!;
+                const quantity = reward.min === reward.max ? `${reward.min}` : `${reward.min}–${reward.max}`;
+                return <b key={`${row.id}-${reward.itemId}`}>{rewardItem.icon} {rewardItem.name}<em>×{quantity}</em></b>;
+              })}</span>
+              <strong>{row.probability}%</strong>
+            </article>)}
+          </div>
+          <footer><i>逐包独立</i><span>每包独立判断 28 项；一次连续开启 10 包后合并入袋。</span></footer>
+        </aside>
+
+        <section className="lucky-stage">
+          <header className="lucky-stage-heading">
+            <div><small>WANGWANG FORTUNE HOUSE</small><h2>旺旺幸运包 ×10</h2><p>十包连开，每包的二十八道福运分别回应。</p></div>
+            <span><b>{luckyTotalOpens}</b><small>累计开启</small></span>
+          </header>
+          <div className={`wangwang-pack-scene ${luckyRolling ? 'opening' : ''}`}>
+            <span className="fortune-cloud cloud-one" /><span className="fortune-cloud cloud-two" />
+            <div className="fortune-coins" aria-hidden="true">{Array.from({ length: 12 }, (_, index) => <i key={index}>◇</i>)}</div>
+            <div className="lucky-pack-run" aria-label={luckyRolling ? `正在开启第 ${luckyOpeningStep || 1} 个，共 10 个` : '十个旺旺幸运包'}>{Array.from({ length: luckyPackBatchSize }, (_, index) => {
+              const packNumber = index + 1;
+              const state = luckyRolling ? packNumber < luckyOpeningStep ? 'opened' : packNumber === luckyOpeningStep ? 'active' : 'pending' : 'settled';
+              return <i key={packNumber} className={state}><b>旺</b><small>{String(packNumber).padStart(2, '0')}</small></i>;
+            })}</div>
+            <div className="wangwang-pack" role="img" aria-label="朱红烫金旺旺幸运包">
+              <i className="pack-knot"><b /></i>
+              <div className="pack-mouth"><i /><i /><i /></div>
+              <div className="pack-body"><span>旺</span><b>二十八运</b><i>福</i></div>
+              <em>LUCKY</em>
+            </div>
+            <div className="fortune-seal"><i>開</i><span>八元启封</span></div>
+          </div>
+          <div className={`lucky-reveal-board ${luckyRolling ? 'rolling' : ''}`} aria-live="polite">
+            {containerReveal?.source === 'zodiac' ? containerReveal.phase === 'opening'
+              ? <div className="lucky-opening zodiac-opening-main"><i>🥚</i><i /><i /><b>生肖彩蛋正在破壳…</b><small>十四道命格即将显现</small><em><i style={{ width: '64%' }} /></em></div>
+              : <><header><span>生肖彩蛋 · 开启结果</span><b>{containerReveal.items.length} 种 · 可售 ¥{formatMoney(containerReveal.items.reduce((sum, item) => sum + item.sellPrice * item.quantity, 0))}</b></header><div>{containerReveal.items.map((item, index) => <article key={item.id} className={`rarity-${item.rarity}`} style={{ '--lucky-color': gachaRarityMeta[item.rarity].color, '--lucky-delay': `${index * 38}ms` } as CSSProperties}><i>{item.icon}</i><span><b>{item.name}</b><small>单价 ¥{formatMoney(item.sellPrice)}</small></span><strong>×{item.quantity}</strong></article>)}</div></>
+              : luckyRolling ? <div className="lucky-opening"><i /><i /><i /><b>正在开启第 {Math.max(1, luckyOpeningStep)} / {luckyPackBatchSize} 包</b><small>当前福签完成 28 项独立判定</small><em><i style={{ width: `${(luckyOpeningStep / luckyPackBatchSize) * 100}%` }} /></em></div>
+              : luckyLatest.length ? <>
+                <header><span>本次福运</span><b>{luckyLatest.length} 种 · 可售 ¥{formatMoney(luckyLatestValue)}</b></header>
+                <div>{luckyLatest.map((drop, index) => {
+                  const dropItem = luckyItemById.get(drop.itemId)!;
+                  const meta = gachaRarityMeta[dropItem.rarity];
+                  return <article key={drop.id} className={`rarity-${dropItem.rarity}`} style={{ '--lucky-color': meta.color, '--lucky-delay': `${index * 38}ms` } as CSSProperties}><i>{dropItem.icon}</i><span><b>{dropItem.name}</b><small>单价 ¥{formatMoney(dropItem.sellPrice)}</small></span><strong>×{drop.quantity}</strong></article>;
+                })}</div>
+              </> : luckyTotalOpens ? <div className="lucky-empty-result"><i>空</i><b>这次福签没有回应</b><small>每项独立判定，落空也是正常结果</small></div>
+                : <div className="lucky-empty-result waiting"><i>旺</i><b>等待第一次十连启封</b><small>十包结果统一汇总并放入背包</small></div>}
+          </div>
+          <div className="lucky-main-action">
+            <button type="button" onClick={openLuckyPack} disabled={luckyRolling || !luckyHasHydrated || !fundHasHydrated || fundBalance < luckyPackUnitCost * luckyPackBatchSize}><span>十包连开 · ¥{luckyPackUnitCost}/包</span><b>开启 ×10</b><small>本次共 ¥{luckyPackUnitCost * luckyPackBatchSize}</small></button>
+            <p><i />{luckyActionNotice ?? '所得物品自动进入右侧福运背包'}</p>
+          </div>
+        </section>
+
+        <aside className="lucky-backpack-panel">
+          <header className="lucky-panel-heading"><span>FORTUNE INVENTORY</span><h2>福运背包</h2><small>生肖彩蛋可开启，其余物品可单卖或全卖</small></header>
+          <section className="lucky-ledger">
+            <div><span>开包花费</span><b>¥{formatMoney(luckySpend)}</b><small>{luckyTotalOpens} 次</small></div>
+            <div><span>出售收入</span><b>¥{formatMoney(luckySaleRevenue)}</b><small>{luckySoldCount} 件</small></div>
+            <footer className={luckySaleRevenue > luckySpend ? 'profit' : ''}><span>{luckySaleRevenue > luckySpend ? '当前净赚' : '当前净花费'}</span><b>¥{formatMoney(Math.abs(luckySpend - luckySaleRevenue))}</b></footer>
+          </section>
+          <div className="lucky-backpack-heading"><span>持有物品</span><i>{luckyCollected} 种 · {luckyBackpackCount} 件</i></div>
+          <div className="lucky-backpack-grid">
+            {!luckyBackpackItems.length ? <div className="lucky-backpack-empty"><i>囊</i><b>福运背包空空如也</b><small>开启幸运包后，奖励会自动存放在这里</small></div> : luckyBackpackItems.map((entry) => {
+              const meta = gachaRarityMeta[entry.rarity];
+              const isEgg = entry.container === 'zodiac';
+              return <article key={entry.id} className={`rarity-${entry.rarity} ${isEgg ? 'zodiac-container' : ''}`} style={{ '--lucky-color': meta.color } as CSSProperties}>
+                <i>{entry.icon}</i><span><b>{entry.name}</b><small>售价 ¥{formatMoney(entry.sellPrice)}</small></span><em>×{luckyInventory[entry.id]}</em>
+                <div>{isEgg && <button type="button" className="open-zodiac" onClick={openZodiacEgg} disabled={luckyRolling}>开启</button>}<button type="button" onClick={() => sellLuckyItem(entry.id, false)}>卖1</button><button type="button" onClick={() => sellLuckyItem(entry.id, true)}>全卖</button></div>
+              </article>;
+            })}
+          </div>
+          <footer className="zodiac-hint"><i>辰</i><span><b>生肖彩蛋藏有十四道命格</b><small>十二生肖 ¥40–100 · 金龙与凤凰各 ¥3,000</small></span></footer>
+        </aside>
+      </section>
+
+      {rareAnnouncement && <div className={`rare-announcement tone-${rareAnnouncement.tone}`} role="alert" onClick={() => setRareAnnouncement(null)}>
+        <div className="rare-sky" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /><i /></div>
+        <span className="rare-beam" aria-hidden="true" />
+        <section>
+          <small>{rareAnnouncement.eyebrow}</small>
+          <i>{rareAnnouncement.icon}</i>
+          <h2>{rareAnnouncement.name}</h2>
+          <p>{rareAnnouncement.message}</p>
+          <b>传说级收获</b>
+          <button type="button" onClick={() => setRareAnnouncement(null)}>收下祥瑞</button>
+        </section>
+      </div>}
 
       {costDetailsOpen && (
         <div className="cost-detail-overlay" onMouseDown={(event) => {
