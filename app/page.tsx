@@ -470,7 +470,7 @@ const luckyChanceRows: LuckyChanceRow[] = [
   { id: 'blood-knight', probability: 1, rewards: [{ itemId: 'lucky-blood-knight', min: 1, max: 1 }] },
   { id: 'skill-book', probability: 3, rewards: [{ itemId: 'lucky-skill-book-3', min: 3, max: 5 }] },
   { id: 'outfit-pack', probability: 5, rewards: [{ itemId: 'lucky-outfit-pack', min: 1, max: 1 }] },
-  { id: 'zodiac-egg', probability: 6, rewards: [{ itemId: 'lucky-zodiac-egg', min: 1, max: 1 }] },
+  { id: 'zodiac-egg', probability: 3, rewards: [{ itemId: 'lucky-zodiac-egg', min: 1, max: 1 }] },
   { id: 'phoenix-baby', probability: 1, rewards: [{ itemId: 'lucky-phoenix-baby', min: 1, max: 1 }] },
   { id: 'gem-accessory-charm', probability: 15, rewards: [{ itemId: 'lucky-gem-accessory-charm', min: 1, max: 1 }] },
   { id: 'new-summon-pill', probability: 0.3, rewards: [{ itemId: 'lucky-new-summon-pill', min: 1, max: 1 }] },
@@ -2142,40 +2142,37 @@ export default function Home() {
     const duckCount = openedLoot.filter((loot) => loot.id === 'loot-duck-bottle').length;
     const breastplateCount = openedLoot.filter((loot) => loot.id === 'loot-fearless-breastplate').length;
     const sourcePrize = gachaPrizeById.get(prizeId)!;
-    setContainerReveal({ id: Date.now(), source: 'gacha', phase: 'opening', containerName: sourcePrize.name, containerIcon: sourcePrize.icon, openCount, items: revealItems });
     if (containerRevealTimer.current !== null) window.clearTimeout(containerRevealTimer.current);
-    containerRevealTimer.current = window.setTimeout(() => {
-      setGachaInventory((current) => {
-        const next = { ...current };
-        const remaining = (next[prizeId] ?? 0) - openCount;
-        if (remaining > 0) next[prizeId] = remaining;
-        else delete next[prizeId];
-        return next;
-      });
-      setGachaLootInventory((current) => {
-        const next = { ...current };
-        openedLoot.forEach((loot) => { next[loot.id] = (next[loot.id] ?? 0) + 1; });
-        return next;
-      });
-      setGachaLatestLootId(featuredLoot.id);
-      setGachaActionNotice(openCount === 1
-        ? `已放入背包：${featuredLoot.name} ×1 · 可售 ¥${featuredLoot.sellPrice}`
-        : `连续开启 ${openCount} 个容器 · 获得 ${lootKinds} 种战利品，已全部入包`);
-      setContainerReveal((current) => current ? { ...current, phase: 'result' } : current);
-      if (duckCount > 0 || breastplateCount > 0) {
-        containerRevealTimer.current = window.setTimeout(() => {
-          setContainerReveal(null);
-          if (duckCount > 0) {
-            showRareAnnouncement({ icon: '🐥', name: '瓶子里的小鸭子', eyebrow: '怪爷爷秘藏 · 奇珍现世', message: duckCount > 1 ? `封存于瓶中的传奇小鸭子，本次一共游来 ${duckCount} 只` : '封存于瓶中的传奇小鸭子，已经游进你的宝物背包', tone: 'treasure' });
-          } else {
-            showRareAnnouncement({ icon: '🛡️', name: '无畏胸甲', eyebrow: '血骑士遗珍 · 无畏降临', message: breastplateCount > 1 ? `猩红战意席卷秘境，本次共获得 ${breastplateCount} 件无畏胸甲` : '猩红战意扑面而来，无畏胸甲已归入你的战利品', tone: 'treasure' });
-          }
-          containerRevealTimer.current = null;
-        }, 650);
-      } else {
+    setContainerReveal({ id: Date.now(), source: 'gacha', phase: 'result', containerName: sourcePrize.name, containerIcon: sourcePrize.icon, openCount, items: revealItems });
+    setGachaInventory((current) => {
+      const next = { ...current };
+      const remaining = (next[prizeId] ?? 0) - openCount;
+      if (remaining > 0) next[prizeId] = remaining;
+      else delete next[prizeId];
+      return next;
+    });
+    setGachaLootInventory((current) => {
+      const next = { ...current };
+      openedLoot.forEach((loot) => { next[loot.id] = (next[loot.id] ?? 0) + 1; });
+      return next;
+    });
+    setGachaLatestLootId(featuredLoot.id);
+    setGachaActionNotice(openCount === 1
+      ? `已放入背包：${featuredLoot.name} ×1 · 可售 ¥${featuredLoot.sellPrice}`
+      : `连续开启 ${openCount} 个容器 · 获得 ${lootKinds} 种战利品，已全部入包`);
+    if (duckCount > 0 || breastplateCount > 0) {
+      containerRevealTimer.current = window.setTimeout(() => {
+        setContainerReveal(null);
+        if (duckCount > 0) {
+          showRareAnnouncement({ icon: '🐥', name: '瓶子里的小鸭子', eyebrow: '怪爷爷秘藏 · 奇珍现世', message: duckCount > 1 ? `封存于瓶中的传奇小鸭子，本次一共游来 ${duckCount} 只` : '封存于瓶中的传奇小鸭子，已经游进你的宝物背包', tone: 'treasure' });
+        } else {
+          showRareAnnouncement({ icon: '🛡️', name: '无畏胸甲', eyebrow: '血骑士遗珍 · 无畏降临', message: breastplateCount > 1 ? `猩红战意席卷秘境，本次共获得 ${breastplateCount} 件无畏胸甲` : '猩红战意扑面而来，无畏胸甲已归入你的战利品', tone: 'treasure' });
+        }
         containerRevealTimer.current = null;
-      }
-    }, 620);
+      }, 320);
+    } else {
+      containerRevealTimer.current = null;
+    }
   }
 
   function sellGachaItem(source: 'prize' | 'loot', itemId: string, sellAll: boolean) {
@@ -2289,30 +2286,27 @@ export default function Home() {
         break;
       }
     }
-    setContainerReveal({ id: Date.now(), source: 'zodiac', phase: 'opening', containerName: '生肖彩蛋', containerIcon: '🥚', openCount: 1, items: [{ id: result.id, name: result.name, icon: result.icon, rarity: result.rarity, sellPrice: result.sellPrice, quantity: 1 }] });
     if (containerRevealTimer.current !== null) window.clearTimeout(containerRevealTimer.current);
-    containerRevealTimer.current = window.setTimeout(() => {
-      setLuckyInventory((current) => {
-        const next = { ...current };
-        const eggsLeft = (next['lucky-zodiac-egg'] ?? 0) - 1;
-        if (eggsLeft > 0) next['lucky-zodiac-egg'] = eggsLeft;
-        else delete next['lucky-zodiac-egg'];
-        next[result.id] = (next[result.id] ?? 0) + 1;
-        return next;
-      });
-      setLuckyLatest([{ id: Date.now(), itemId: result.id, quantity: 1 }]);
-      setLuckyActionNotice(`生肖彩蛋开启：${result.name} ×1 · 可售 ¥${formatMoney(result.sellPrice)}`);
-      setContainerReveal((current) => current ? { ...current, phase: 'result' } : current);
-      if (result.celestial) {
-        containerRevealTimer.current = window.setTimeout(() => {
-          setContainerReveal(null);
-          showRareAnnouncement({ icon: result.icon, name: result.name, eyebrow: '天命显现 · 万象共鸣', message: '祥瑞撕裂夜幕，传说灵兽已降临你的背包', tone: 'celestial' });
-          containerRevealTimer.current = null;
-        }, 650);
-      } else {
+    setContainerReveal({ id: Date.now(), source: 'zodiac', phase: 'result', containerName: '生肖彩蛋', containerIcon: '🥚', openCount: 1, items: [{ id: result.id, name: result.name, icon: result.icon, rarity: result.rarity, sellPrice: result.sellPrice, quantity: 1 }] });
+    setLuckyInventory((current) => {
+      const next = { ...current };
+      const eggsLeft = (next['lucky-zodiac-egg'] ?? 0) - 1;
+      if (eggsLeft > 0) next['lucky-zodiac-egg'] = eggsLeft;
+      else delete next['lucky-zodiac-egg'];
+      next[result.id] = (next[result.id] ?? 0) + 1;
+      return next;
+    });
+    setLuckyLatest([{ id: Date.now(), itemId: result.id, quantity: 1 }]);
+    setLuckyActionNotice(`生肖彩蛋开启：${result.name} ×1 · 可售 ¥${formatMoney(result.sellPrice)}`);
+    if (result.celestial) {
+      containerRevealTimer.current = window.setTimeout(() => {
+        setContainerReveal(null);
+        showRareAnnouncement({ icon: result.icon, name: result.name, eyebrow: '天命显现 · 万象共鸣', message: '祥瑞撕裂夜幕，传说灵兽已降临你的背包', tone: 'celestial' });
         containerRevealTimer.current = null;
-      }
-    }, 620);
+      }, 320);
+    } else {
+      containerRevealTimer.current = null;
+    }
   }
 
   function sellLuckyItem(itemId: string, sellAll: boolean) {
