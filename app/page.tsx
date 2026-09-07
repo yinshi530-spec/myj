@@ -373,16 +373,16 @@ const gachaContainers: Record<string, GachaContainer> = {
       { id: 'loot-duck-bottle', name: '瓶子里的小鸭子', icon: '🐥', probability: 1, sellPrice: 800, rarity: 'mythic' },
       { id: 'loot-dragon-wing', name: '强效龙翼', icon: '🐉', probability: 4, sellPrice: 60, rarity: 'legendary' },
       { id: 'loot-hero-medal', name: '英雄勋章', icon: '🏅', probability: 5, sellPrice: 58, rarity: 'legendary' },
-      { id: 'loot-time-rift', name: '时空缝隙', icon: '🌀', probability: 6, sellPrice: 55, rarity: 'epic' },
-      { id: 'loot-allround-medal', name: '通吃勋章', icon: '🎖️', probability: 7, sellPrice: 52, rarity: 'epic' },
-      { id: 'loot-battle-mark', name: '作战徽记', icon: '⚔️', probability: 8, sellPrice: 50, rarity: 'epic' },
-      { id: 'loot-iron-shield', name: '铁盾胸针', icon: '🛡️', probability: 9, sellPrice: 50, rarity: 'rare' },
-      { id: 'loot-pocket-cannon', name: '袖珍大炮', icon: '💣', probability: 9, sellPrice: 48, rarity: 'rare' },
-      { id: 'loot-little-poker', name: '小扑挂坠', icon: '♠️', probability: 10, sellPrice: 48, rarity: 'rare' },
-      { id: 'loot-silver-spoon', name: '银勺护符', icon: '🥄', probability: 10, sellPrice: 45, rarity: 'common' },
-      { id: 'loot-power-screw', name: '动力螺丝', icon: '🔩', probability: 10, sellPrice: 45, rarity: 'common' },
-      { id: 'loot-alchemy-stone', name: '炼金石', icon: '⚗️', probability: 10, sellPrice: 42, rarity: 'common' },
-      { id: 'loot-mana-lens', name: '法力透镜', icon: '🔍', probability: 11, sellPrice: 40, rarity: 'common' },
+      { id: 'loot-time-rift', name: '时空缝隙', icon: '🌀', probability: 6, sellPrice: 10, rarity: 'epic' },
+      { id: 'loot-allround-medal', name: '通吃勋章', icon: '🎖️', probability: 7, sellPrice: 9, rarity: 'epic' },
+      { id: 'loot-battle-mark', name: '作战徽记', icon: '⚔️', probability: 8, sellPrice: 8, rarity: 'epic' },
+      { id: 'loot-iron-shield', name: '铁盾胸针', icon: '🛡️', probability: 9, sellPrice: 7, rarity: 'rare' },
+      { id: 'loot-pocket-cannon', name: '袖珍大炮', icon: '💣', probability: 9, sellPrice: 6, rarity: 'rare' },
+      { id: 'loot-little-poker', name: '小扑挂坠', icon: '♠️', probability: 10, sellPrice: 5, rarity: 'rare' },
+      { id: 'loot-silver-spoon', name: '银勺护符', icon: '🥄', probability: 10, sellPrice: 4, rarity: 'common' },
+      { id: 'loot-power-screw', name: '动力螺丝', icon: '🔩', probability: 10, sellPrice: 3, rarity: 'common' },
+      { id: 'loot-alchemy-stone', name: '炼金石', icon: '⚗️', probability: 10, sellPrice: 2, rarity: 'common' },
+      { id: 'loot-mana-lens', name: '法力透镜', icon: '🔍', probability: 11, sellPrice: 1, rarity: 'common' },
     ],
   },
   'gacha-10': {
@@ -392,15 +392,15 @@ const gachaContainers: Record<string, GachaContainer> = {
       { id: 'loot-fearless-breastplate', name: '无畏胸甲', icon: '🛡️', probability: 1, sellPrice: 500, rarity: 'mythic' },
       { id: 'loot-fearless-helmet', name: '无畏头盔', icon: '🪖', probability: 4, sellPrice: 60, rarity: 'legendary' },
       { id: 'loot-fearless-shoulders', name: '无畏肩甲', icon: '🦾', probability: 5, sellPrice: 58, rarity: 'legendary' },
-      { id: 'loot-fearless-leggings', name: '无畏腿铠', icon: '🦿', probability: 6, sellPrice: 55, rarity: 'epic' },
-      { id: 'loot-fearless-gauntlets', name: '无畏护手', icon: '🥊', probability: 7, sellPrice: 52, rarity: 'epic' },
-      { id: 'loot-fearless-boots', name: '无畏战靴', icon: '🥾', probability: 8, sellPrice: 50, rarity: 'epic' },
-      { id: 'loot-fearless-belt', name: '无畏腰带', icon: '🔗', probability: 9, sellPrice: 48, rarity: 'rare' },
-      { id: 'loot-fearless-bracers', name: '无畏护腕', icon: '⛓️', probability: 10, sellPrice: 45, rarity: 'rare' },
-      { id: 'loot-source-ore', name: '源质矿石', icon: '🪨', probability: 10, sellPrice: 1, rarity: 'rare' },
-      { id: 'loot-frostweave', name: '冰霜暗纹', icon: '❄️', probability: 10, sellPrice: 1, rarity: 'rare' },
-      { id: 'loot-demon-crystal', name: '魔化晶石', icon: '🔮', probability: 15, sellPrice: 1, rarity: 'common' },
-      { id: 'loot-mana-crystal', name: '法力结晶', icon: '💠', probability: 15, sellPrice: 1, rarity: 'common' },
+      { id: 'loot-fearless-leggings', name: '无畏腿铠', icon: '🦿', probability: 6, sellPrice: 9.8, rarity: 'epic' },
+      { id: 'loot-fearless-gauntlets', name: '无畏护手', icon: '🥊', probability: 7, sellPrice: 8.8, rarity: 'epic' },
+      { id: 'loot-fearless-boots', name: '无畏战靴', icon: '🥾', probability: 8, sellPrice: 7.8, rarity: 'epic' },
+      { id: 'loot-fearless-belt', name: '无畏腰带', icon: '🔗', probability: 9, sellPrice: 6.8, rarity: 'rare' },
+      { id: 'loot-fearless-bracers', name: '无畏护腕', icon: '⛓️', probability: 10, sellPrice: 5.8, rarity: 'rare' },
+      { id: 'loot-source-ore', name: '源质矿石', icon: '🪨', probability: 10, sellPrice: 4.8, rarity: 'rare' },
+      { id: 'loot-frostweave', name: '冰霜暗纹', icon: '❄️', probability: 10, sellPrice: 3.8, rarity: 'rare' },
+      { id: 'loot-demon-crystal', name: '魔化晶石', icon: '🔮', probability: 15, sellPrice: 2.8, rarity: 'common' },
+      { id: 'loot-mana-crystal', name: '法力结晶', icon: '💠', probability: 15, sellPrice: 1.8, rarity: 'common' },
     ],
   },
 };
@@ -2194,7 +2194,7 @@ export default function Home() {
     const itemName = source === 'prize' ? gachaPrizeById.get(itemId)?.name : gachaLootById.get(itemId)?.name;
     setGachaSaleRevenue((current) => current + unitPrice * quantity);
     setGachaSoldCount((current) => current + quantity);
-    setGachaActionNotice(`卖出 ${itemName ?? '物品'} ×${quantity} · 到账 ¥${unitPrice * quantity}`);
+    setGachaActionNotice(`卖出 ${itemName ?? '物品'} ×${quantity} · 到账 ¥${formatMoney(unitPrice * quantity)}`);
   }
 
   function openLuckyPack() {
@@ -2951,8 +2951,8 @@ export default function Home() {
           <header className="gacha-panel-heading"><span>ADVENTURER BACKPACK</span><h2>猫猫探险背包</h2><small>开启容器、管理战利品、卖出补充资金池</small></header>
           <section className="gacha-economy-ledger">
             <header><span>寻宝账本</span><small>本地永久累计</small></header>
-            <div><article className="expense"><span>寻宝花费</span><b>¥{gachaSpend.toFixed(0)}</b><small>{gachaTotalDraws} 次探索</small></article><article className="income"><span>卖出收入</span><b>¥{gachaSaleRevenue.toFixed(0)}</b><small>{gachaSoldCount} 件物品</small></article></div>
-            <footer className={gachaSaleRevenue > gachaSpend ? 'profit' : ''}><span>{gachaSaleRevenue > gachaSpend ? '当前净赚' : '当前净花费'}</span><b>¥{Math.abs(gachaSpend - gachaSaleRevenue).toFixed(0)}</b><small>背包现有 {gachaCollected + gachaLootCollected} 种 · {gachaBackpackCount} 件</small></footer>
+            <div><article className="expense"><span>寻宝花费</span><b>¥{formatMoney(gachaSpend)}</b><small>{gachaTotalDraws} 次探索</small></article><article className="income"><span>卖出收入</span><b>¥{formatMoney(gachaSaleRevenue)}</b><small>{gachaSoldCount} 件物品</small></article></div>
+            <footer className={gachaSaleRevenue > gachaSpend ? 'profit' : ''}><span>{gachaSaleRevenue > gachaSpend ? '当前净赚' : '当前净花费'}</span><b>¥{formatMoney(Math.abs(gachaSpend - gachaSaleRevenue))}</b><small>背包现有 {gachaCollected + gachaLootCollected} 种 · {gachaBackpackCount} 件</small></footer>
           </section>
           <div className="gacha-collection-meter"><span><b>图鉴完成度</b><em>{Math.round((gachaCollected / gachaPrizes.length) * 100)}%</em></span><i><i style={{ width: `${(gachaCollected / gachaPrizes.length) * 100}%` }} /></i></div>
           <details className="gacha-container-rules">
